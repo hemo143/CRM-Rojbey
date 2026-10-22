@@ -1,0 +1,28 @@
+ROJBEY CRM — STATUS CHECKLIST
+
+[Artifacts created]
+- [x] Google Sheets import workbook
+- [x] Apps Script source file
+- [x] Interactive HTML demo
+- [x] Private Live CRM Demo V2
+- [x] Executive presentation V2
+- [x] Bridal CRM client presentation
+- [x] Original Phase 01 POC ZIP
+- [x] Meta integration reference document
+
+[Requires live verification]
+- [ ] Apps Script deployed to production
+- [ ] Apps Script connected to the correct Google Sheet
+- [ ] Real customer record creation/update tested
+- [ ] Appointment conflict detection tested against live data
+- [ ] Follow-up and dashboard calculations verified against live data
+- [ ] Exposed Meta Page token revoked
+- [ ] Replacement token created securely
+- [ ] Correct Meta permissions assigned to the system user
+- [ ] Facebook webhook subscription verified
+- [ ] Instagram messaging event flow verified
+- [ ] CRM storage destination connected
+- [ ] Duplicate webhook delivery handling tested
+- [ ] App Review / advanced access / business verification requirements confirmed
+
+Do not mark pending items complete without test evidence.

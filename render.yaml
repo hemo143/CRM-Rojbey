@@ -1,0 +1,22 @@
+# Public synthetic-data demo only. Free instances do not preserve local JSON.
+services:
+  - type: web
+    name: rojbey-crm-demo
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:render
+    healthCheckPath: /api/auth
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: CRM_DEMO_MODE
+        value: "true"
+      - key: CRM_DATA_PROVIDER
+        value: local
+      - key: CRM_DATA_DIR
+        value: /tmp/rojbey-demo
+      - key: CRM_SESSION_SECRET
+        generateValue: true
