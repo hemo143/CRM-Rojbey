@@ -612,6 +612,8 @@
           const due = d.tasks.filter(
             (t) =>
               t.status !== d.config.values.taskComplete &&
+              (!d.config.values.taskCancelled ||
+                t.status !== d.config.values.taskCancelled) &&
               /^\d{4}-\d{2}-\d{2}$/.test(t.due) &&
               t.due <= d.today,
           );
@@ -730,6 +732,7 @@
             ["overdue", "المتأخرة"],
             ["upcoming", "القادمة"],
             ["complete", "المكتملة"],
+            ["cancelled", "الملغاة"],
           ].forEach(([v, label]) => options.append(new Option(label, v)));
           options.value = state.taskView;
           options.onchange = () => {
@@ -740,9 +743,15 @@
           const tasks = d.tasks
             .filter((t) => {
               const done = t.status === d.config.values.taskComplete;
+              const cancelled =
+                !!d.config.values.taskCancelled &&
+                t.status === d.config.values.taskCancelled;
               return state.taskView === "complete"
                 ? done
-                : !done &&
+                : state.taskView === "cancelled"
+                  ? cancelled
+                  : !done &&
+                    !cancelled &&
                     (state.taskView === "open" ||
                       (state.taskView === "today" && t.due === d.today) ||
                       (state.taskView === "overdue" &&
@@ -766,7 +775,10 @@
                 t.status,
                 t.status === d.config.values.taskComplete
                   ? "مكتملة"
-                  : button("إكمال", () => completeTask(t), "link"),
+                  : d.config.values.taskCancelled &&
+                      t.status === d.config.values.taskCancelled
+                    ? "ملغاة"
+                    : button("إكمال", () => completeTask(t), "link"),
               ]),
             ),
           );
@@ -855,6 +867,11 @@
           ["model", "الموديل"],
           ["dress", "كود الفستان"],
           ["staff", "الموظفة"],
+          ["channel", "قناة التواصل"],
+          ["username", "Username"],
+          ["metaContactId", "Meta Contact ID"],
+          ["lastMessage", "آخر رسالة"],
+          ["lastMessageAt", "تاريخ آخر رسالة"],
           ["createdAt", "تاريخ الإضافة"],
           ["updatedAt", "آخر تعديل"],
           ["notes", "الملاحظات"],
@@ -956,11 +973,15 @@
             ["wedding", "تاريخ الفرح (أصلي)", "text"],
             ["city", "مكان السكن", "text"],
             ["dress", "كود الفستان", "text"],
+            ["username", "Username", "text"],
+            ["metaContactId", "Meta Contact ID", "text"],
+            ["lastMessageAt", "تاريخ آخر رسالة", "text"],
           ].forEach(([name, label, type, required]) =>
             field(name, label, type, record && record[name], required),
           );
           [
             ["source", "المصدر"],
+            ["channel", "قناة التواصل"],
             ["status", "حالة العميلة"],
             ["service", "الخدمة"],
             ["model", "الموديل"],
@@ -976,8 +997,18 @@
                   ? values.customerNew
                   : "",
               name === "status",
-              lists[name].length ? lists[name] : null,
+              name === "staff" && d.profile
+                ? lists[name]
+                : lists[name].length
+                  ? lists[name]
+                  : null,
             ),
+          );
+          field(
+            "lastMessage",
+            "آخر رسالة",
+            "textarea",
+            record && record.lastMessage,
           );
           field("notes", "الملاحظات", "textarea", record && record.notes);
         } else {
@@ -1030,13 +1061,15 @@
             "text",
             (record && record.staff) || "",
             true,
-            lists.staff.length ? lists.staff : null,
+            d.profile ? lists.staff : lists.staff.length ? lists.staff : null,
           );
           if (!lists.staff.length)
             $("formgrid").append(
               el(
                 "small",
-                "قائمة الموظفات غير مهيأة؛ أدخلي اسمًا حقيقيًا أو اضبطي القائمة من الشيت.",
+                d.profile
+                  ? "قائمة الموظفات المعتمدات فارغة؛ أكملي إعدادها في القوائم والإعدادات قبل الإسناد."
+                  : "قائمة الموظفات غير مهيأة؛ أدخلي اسمًا حقيقيًا أو اضبطي القائمة من الشيت.",
                 "full",
               ),
             );

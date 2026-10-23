@@ -28,7 +28,7 @@ after(async () => {
 function backend() {
   const fixture = mocks();
   vm.createContext(fixture.context);
-  for (const f of ["Schema.gs", "Setup.gs", "Code.gs"])
+  for (const f of ["Schema.gs", "Workbook.gs", "Setup.gs", "Code.gs"])
     vm.runInContext(
       fs.readFileSync(path.resolve(__dirname, "..", f), "utf8"),
       fixture.context,
@@ -103,10 +103,8 @@ test("browser workflow uses .gs backend: customer, profile edit, appointment/can
       .fill("<b>safe literal note</b>");
     await dialog.getByRole("button", { name: "حفظ في Google Sheet" }).click();
     await dialog.waitFor({ state: "hidden" });
-    assert.equal(
-      await page.getByText("<b>safe literal note</b>", { exact: true }).count(),
-      1,
-    );
+    await page.getByText("<b>safe literal note</b>", { exact: true }).waitFor();
+    assert.equal(await page.getByText("<b>safe literal note</b>", { exact: true }).count(),1);
     assert.equal(await page.locator(".detail b").count(), 0);
     await page.getByRole("button", { name: "حجز موعد", exact: true }).click();
     await dialog.getByLabel("الوقت · القاهرة").fill("12:00");

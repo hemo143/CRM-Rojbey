@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "..");
 function setup(prepare) {
   const { db, context } = mocks();
   vm.createContext(context);
-  for (const name of ["Schema.gs", "Setup.gs", "Code.gs"])
+  for (const name of ["Schema.gs", "Workbook.gs", "Setup.gs", "Code.gs"])
     vm.runInContext(fs.readFileSync(path.join(root, name), "utf8"), context, {
       filename: name,
     });
@@ -85,13 +85,13 @@ test("empty setup: schema contract, no seed customers, idempotent headers and no
   c.RB_createBackup();
   c.RB_setup();
   assert.equal(db.active.sheets.length, n);
-  assert.equal(db.active.getSheetByName("العملاء").getLastColumn(), 15);
+  assert.equal(db.active.getSheetByName("العملاء").getLastColumn(), 20);
   assert.equal(c.RB_audit().projectTriggers.length, 0);
 });
 test("non-empty setup requires a verified backup and preserves values/formulas/extra columns", () => {
   const { db, context } = mocks();
   vm.createContext(context);
-  for (const f of ["Schema.gs", "Setup.gs", "Code.gs"])
+  for (const f of ["Schema.gs", "Workbook.gs", "Setup.gs", "Code.gs"])
     vm.runInContext(fs.readFileSync(path.join(root, f), "utf8"), context);
   const c = context;
   c.RB_bindSpreadsheet();
@@ -113,7 +113,7 @@ test("non-empty setup requires a verified backup and preserves values/formulas/e
     db.active.getSheetByName("العملاء").getRange(2, 15).getFormulas()[0][0],
     "=1+1",
   );
-  assert.equal(db.active.getSheetByName("العملاء").getLastColumn(), 16);
+  assert.equal(db.active.getSheetByName("العملاء").getLastColumn(), 21);
 });
 test("stale backup cannot authorize setup; unknown schema or likely equivalent tab stops without changes", () => {
   const { db, c } = setup();
@@ -122,7 +122,7 @@ test("stale backup cannot authorize setup; unknown schema or likely equivalent t
   assert.throws(() => c.RB_setup(), /لا تطابق/);
   const first = mocks();
   vm.createContext(first.context);
-  for (const f of ["Schema.gs", "Setup.gs", "Code.gs"])
+  for (const f of ["Schema.gs", "Workbook.gs", "Setup.gs", "Code.gs"])
     vm.runInContext(fs.readFileSync(path.join(root, f), "utf8"), first.context);
   first.context.RB_bindSpreadsheet();
   first.db.active.insertSheet("Customers");
@@ -348,16 +348,17 @@ test("reordered headers are mapped by name; literals resembling formulas stay li
   sheet.getRange(1, 1, 1, 15).setValues([headers]);
   const id = add(c).id;
   assert.equal(raw(db, "العملاء", 2, 5), "Synthetic test customer");
-  sheet.getRange(1, 16).setValue("Original text field");
-  sheet.getRange(2, 16).setValue("'=literal text, not a formula");
+  const extraCol = sheet.getLastColumn() + 1;
+  sheet.getRange(1, extraCol).setValue("Original text field");
+  sheet.getRange(2, extraCol).setValue("'=literal text, not a formula");
   c.RB_updateCustomer({
     id,
     notes: "changed",
     requestId: "literal-update-001",
   });
-  assert.equal(sheet.getRange(2, 16).getFormulas()[0][0], "");
+  assert.equal(sheet.getRange(2, extraCol).getFormulas()[0][0], "");
   assert.equal(
-    sheet.getRange(2, 16).getValue(),
+    sheet.getRange(2, extraCol).getValue(),
     "=literal text, not a formula",
   );
 });

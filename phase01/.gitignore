@@ -1,0 +1,9 @@
+# Customer exports and private verification files must never be committed.
+*.xlsx
+*.xlsm
+*.csv
+*-snapshot.json
+private/
+__pycache__/
+*.pyc
+.venv/

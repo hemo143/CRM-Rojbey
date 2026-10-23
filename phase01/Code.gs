@@ -166,13 +166,28 @@ function rbCustomerPatch_(p, old, config) {
     "status",
     "service",
     "model",
+    "channel",
+    "metaContactId",
+    "username",
+    "lastMessage",
+    "lastMessageAt",
   ].forEach((k) => {
     if (Object.prototype.hasOwnProperty.call(p, k)) {
       const value = rbString_(
         p[k],
-        k === "notes" ? 4000 : k === "name" ? 120 : 200,
+        k === "notes"
+          ? 4000
+          : k === "lastMessage"
+            ? 2000
+            : k === "name"
+              ? 120
+              : 200,
       );
-      if (["source", "staff", "status", "service", "model"].indexOf(k) >= 0)
+      if (
+        ["source", "staff", "status", "service", "model", "channel"].indexOf(
+          k,
+        ) >= 0
+      )
         rbChoice_(config, k, value, old && old[k]);
       if (!old || value !== old[k]) patch[fields[k]] = rbSafe_(value);
     }
@@ -338,7 +353,13 @@ function RB_completeTask(input) {
   return rbWrite_("إكمال متابعة", p, (id, requestId) => {
     const t = rbFind_("tasks", id);
     if (t._request === requestId) return {};
-    const done = rbConfig_().values.taskComplete;
+    const taskConfig = rbConfig_();
+    const done = taskConfig.values.taskComplete;
+    if (
+      taskConfig.values.taskCancelled &&
+      t.status === taskConfig.values.taskCancelled
+    )
+      throw Error("المتابعة ملغاة؛ لا يتم تحويلها إلى مكتملة تلقائيًا");
     if (t.status === done) return { alreadyComplete: true };
     return {
       plan: rbPlan_("tasks", t._row, { الحالة: rbSafe_(done) }, requestId),
@@ -383,8 +404,7 @@ function RB_getData() {
       stats: Object.assign(
         {
           appointments: appointments.length,
-          tasks: tasks.filter((t) => t.status !== config.values.taskComplete)
-            .length,
+          tasks: tasks.filter((t) => rbTaskOpen_(t, config)).length,
         },
         rbMetrics_(customers, appointments, tasks, config, today),
       ),
@@ -404,6 +424,7 @@ function RB_getData() {
         orphanTasks: tasks.filter((t) => !linked.has(t.customerId)).length,
       },
       source: "Google Sheets",
+      profile: rbProfile_(),
     };
   });
 }
@@ -421,13 +442,16 @@ function rbMetrics_(customers, appointments, tasks, config, today) {
     upcomingAppointments: appointments.filter(
       (a) => rbDateValid_(a.date) && a.date > today && a.status !== cancelled,
     ).length,
-    openTasks: tasks.filter((t) => t.status !== done).length,
-    tasksToday: tasks.filter((t) => t.status !== done && t.due === today)
+    openTasks: tasks.filter((t) => rbTaskOpen_(t, config)).length,
+    tasksToday: tasks.filter((t) => rbTaskOpen_(t, config) && t.due === today)
       .length,
     overdueTasks: tasks.filter(
-      (t) => t.status !== done && rbDateValid_(t.due) && t.due < today,
+      (t) => rbTaskOpen_(t, config) && rbDateValid_(t.due) && t.due < today,
     ).length,
     completedTasks: tasks.filter((t) => t.status === done).length,
+    cancelledTasks: config.values.taskCancelled
+      ? tasks.filter((t) => t.status === config.values.taskCancelled).length
+      : 0,
   };
 }
 function rbDashboard_() {
@@ -451,6 +475,7 @@ function rbDashboard_() {
     tasksToday: "متابعات اليوم",
     overdueTasks: "متابعات متأخرة",
     completedTasks: "متابعات مكتملة",
+    cancelledTasks: "متابعات ملغاة",
   };
   const rows = Object.keys(metrics).map((k) => ({
     id: k,

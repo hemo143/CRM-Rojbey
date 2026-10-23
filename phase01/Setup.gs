@@ -133,10 +133,10 @@ function rbPreflight_() {
     );
   Object.keys(RB_SCHEMA).forEach((key) => {
     const t = rbTable_(key, true);
-    if (t && t.sheet.getLastRow() > 0) rbCheckTable_(key, t, false);
-    const aliases = RB_SCHEMA[key].aliases.filter(
-      (name) => name !== rbName_(key) && ss.getSheetByName(name),
-    );
+    if (t && t.sheet.getLastRow() > 0) rbCheckPreflight_(key, t);
+    const aliases = [RB_SCHEMA[key].name]
+      .concat(RB_SCHEMA[key].aliases)
+      .filter((name) => name !== rbName_(key) && ss.getSheetByName(name));
     if (aliases.length)
       throw Error(
         "يوجد تبويب مكافئ محتمل: " +
@@ -201,8 +201,8 @@ function RB_audit() {
         name: rbName_(key),
         exists: !!t,
         missing: t
-          ? RB_SCHEMA[key].headers.filter((h) => t.map[h] === undefined)
-          : RB_SCHEMA[key].headers,
+          ? rbHeaders_(key).filter((h) => t.map[h] === undefined)
+          : rbHeaders_(key),
         extraRequired: t
           ? RB_SCHEMA[key].extra.filter((h) => t.map[h] === undefined)
           : RB_SCHEMA[key].extra,
@@ -284,10 +284,13 @@ function RB_setup() {
       }
       if (t.sheet.getLastRow() === 0)
         t.sheet
-          .getRange(1, 1, 1, schema.headers.length)
-          .setValues([schema.headers]);
+          .getRange(1, 1, 1, rbHeaders_(key).length)
+          .setValues([rbHeaders_(key)]);
       t = rbTable_(key);
-      schema.extra.forEach((h) => {
+      (rbProfile_() && key === "lists"
+        ? schema.extra.concat("الموظفات")
+        : schema.extra
+      ).forEach((h) => {
         if (t.map[h] === undefined) {
           if (t.headers.length + 1 > t.sheet.getMaxColumns())
             t.sheet.insertColumnsAfter(t.sheet.getMaxColumns(), 1);
@@ -332,10 +335,11 @@ function RB_setup() {
       appointmentCancelled: "appointmentStatus",
       taskOpen: "taskStatus",
       taskComplete: "taskStatus",
+      taskCancelled: "taskStatus",
       appointmentDefaultType: "appointmentType",
     };
     Object.keys(RB_LISTS).forEach((k) => {
-      const col = ls.map[RB_LISTS[k].header];
+      const col = ls.map[rbListHeader_(k)];
       if (
         ls.sheet.getLastRow() < 2 ||
         !ls.sheet
@@ -343,12 +347,12 @@ function RB_setup() {
           .getDisplayValues()
           .some((r) => rbString_(r[0]))
       ) {
-        const values = observed[k].slice();
+        const values = rbProfile_() && k === "staff" ? [] : observed[k].slice();
         if (!values.length) {
           Object.keys(settingsMap)
             .filter((s) => settingsMap[s] === k)
             .forEach((s) => {
-              if (values.indexOf(RB_DEFAULTS[s][0]) < 0)
+              if (RB_DEFAULTS[s][0] && values.indexOf(RB_DEFAULTS[s][0]) < 0)
                 values.push(RB_DEFAULTS[s][0]);
             });
         }
@@ -361,12 +365,17 @@ function RB_setup() {
     Object.keys(RB_DEFAULTS).forEach((k) => {
       if (!currentSettings.some((r) => r.raw["المفتاح"] === k)) {
         const listKey = settingsMap[k],
-          defaultValue = RB_DEFAULTS[k][0];
+          defaultValue =
+            rbProfile_() && k === "appointmentDefaultType"
+              ? "زيارة أولى"
+              : rbProfile_() && k === "taskCancelled"
+                ? "ملغاة"
+                : RB_DEFAULTS[k][0];
         const options = listKey
           ? ls.sheet
               .getRange(
                 2,
-                ls.map[RB_LISTS[listKey].header] + 1,
+                ls.map[rbListHeader_(listKey)] + 1,
                 ls.sheet.getMaxRows() - 1,
                 1,
               )
@@ -381,7 +390,7 @@ function RB_setup() {
         });
       }
     });
-    rbValidation_();
+    const validations = rbValidation_();
     let needsConfiguration = [];
     try {
       rbConfig_();
@@ -393,6 +402,7 @@ function RB_setup() {
     return {
       ok: true,
       needsConfiguration: needsConfiguration,
+      missingLists: validations.missingLists,
       note: "لم يتم تعديل أو دمج سجلات العميلات الأصلية. راجعي تقرير التدقيق والقوائم قبل التشغيل.",
     };
   });
@@ -404,7 +414,7 @@ function rbValidation_() {
   const bindings = [];
   Object.keys(RB_LISTS).forEach((k) => {
     const spec = RB_LISTS[k],
-      col = table.map[spec.header] + 1;
+      col = table.map[rbListHeader_(k)] + 1;
     const values = table.sheet
       .getRange(2, col, table.sheet.getMaxRows() - 1, 1)
       .getDisplayValues();

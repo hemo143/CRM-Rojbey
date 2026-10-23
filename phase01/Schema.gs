@@ -49,7 +49,14 @@ const RB_SCHEMA = {
     name: RB.CUSTOMERS,
     aliases: ["Customers", "customers"],
     headers: CHEAD,
-    extra: ["Last Request ID"],
+    extra: [
+      "قناة التواصل",
+      "Meta Contact ID",
+      "Username",
+      "آخر رسالة",
+      "تاريخ آخر رسالة",
+      "Last Request ID",
+    ],
     id: "Customer ID",
     fields: {
       id: "Customer ID",
@@ -66,6 +73,11 @@ const RB_SCHEMA = {
       model: "موديل الفستان",
       createdAt: "تاريخ الإضافة",
       updatedAt: "آخر تعديل",
+      channel: "قناة التواصل",
+      metaContactId: "Meta Contact ID",
+      username: "Username",
+      lastMessage: "آخر رسالة",
+      lastMessageAt: "تاريخ آخر رسالة",
     },
   },
   appointments: {
@@ -132,7 +144,7 @@ const RB_SCHEMA = {
   },
   lists: {
     name: "القوائم المنسدلة",
-    aliases: ["Validation_Lists"],
+    aliases: ["Validation_Lists", "القوائم والإعدادات"],
     headers: [
       "المصادر",
       "حالات العميلات",
@@ -142,6 +154,7 @@ const RB_SCHEMA = {
       "أنواع المواعيد",
       "حالات المواعيد",
       "حالات المتابعات",
+      "قنوات التواصل",
     ],
     extra: [],
   },
@@ -153,6 +166,12 @@ const RB_SCHEMA = {
   },
 };
 const RB_LISTS = {
+  channel: {
+    header: "قنوات التواصل",
+    entity: "customers",
+    field: "channel",
+    range: "RB_CHANNEL",
+  },
   source: {
     header: "المصادر",
     entity: "customers",
@@ -211,6 +230,7 @@ const RB_DEFAULTS = {
   appointmentCancelled: ["ملغي", "الموعد بهذه الحالة لا يحجز التوقيت"],
   taskOpen: ["جديدة", "حالة مهمة جديدة"],
   taskComplete: ["مكتملة", "حالة مهمة مكتملة"],
+  taskCancelled: ["", "حالة متابعة ملغاة اختيارية؛ لا تُحسب مفتوحة أو متأخرة"],
   appointmentDefaultType: [
     "زيارة",
     "نوع الموعد الافتراضي الموروث؛ يمكن تغييره",
@@ -256,6 +276,19 @@ function rbName_(key) {
   const map = raw ? JSON.parse(raw) : {};
   return map[key] || RB_SCHEMA[key].name;
 }
+function rbProfile_() {
+  return rbProps_().getProperty("RB_WORKBOOK_PROFILE") === "rojbey-2026-export";
+}
+function rbHeader_(key, header) {
+  const raw = rbProps_().getProperty("RB_LIST_HEADER_MAP");
+  return key === "lists" && raw ? JSON.parse(raw)[header] || header : header;
+}
+function rbHeaders_(key) {
+  return RB_SCHEMA[key].headers.map((h) => rbHeader_(key, h));
+}
+function rbListHeader_(key) {
+  return rbHeader_("lists", RB_LISTS[key].header);
+}
 function rbTable_(key, optional) {
   const s = rbSpreadsheet_().getSheetByName(rbName_(key));
   if (!s) {
@@ -281,7 +314,7 @@ function rbTable_(key, optional) {
 }
 function rbCheckTable_(key, table, withExtras) {
   const schema = RB_SCHEMA[key];
-  const missing = schema.headers
+  const missing = rbHeaders_(key)
     .concat(withExtras ? schema.extra : [])
     .filter((h) => table.map[h] === undefined);
   if (missing.length)
@@ -341,7 +374,7 @@ function rbConfig_() {
   });
   Object.keys(RB_DEFAULTS).forEach((k) => {
     if (!c[k]) {
-      if (k === "allowedEmails") c[k] = "";
+      if (k === "allowedEmails" || k === "taskCancelled") c[k] = "";
       else throw Error("إعداد مطلوب: " + k);
     }
   });
@@ -350,7 +383,7 @@ function rbConfig_() {
   Object.keys(RB_LISTS).forEach((k) => {
     lists[k] = [
       ...new Set(
-        rows.map((r) => rbString_(r.raw[RB_LISTS[k].header])).filter(Boolean),
+        rows.map((r) => rbString_(r.raw[rbListHeader_(k)])).filter(Boolean),
       ),
     ];
   });
@@ -417,6 +450,16 @@ function rbPhone_(value) {
     .replace(/^00/, "+");
 }
 function rbChoice_(config, key, value, old) {
+  if (
+    rbProfile_() &&
+    key === "staff" &&
+    value &&
+    value !== old &&
+    !config.lists.staff.length
+  )
+    throw Error(
+      "قائمة الموظفات المعتمدات فارغة. راجعي الأسماء التاريخية وأضيفي الأسماء المعتمدة يدويًا قبل الإسناد.",
+    );
   if (
     value &&
     config.lists[key].length &&
@@ -491,4 +534,12 @@ function rbApply_(plan) {
 }
 function rbAppend_(key, object) {
   rbApply_(rbPlan_(key, null, object, null));
+}
+
+function rbTaskOpen_(task, config) {
+  return (
+    task.status !== config.values.taskComplete &&
+    (!config.values.taskCancelled ||
+      task.status !== config.values.taskCancelled)
+  );
 }
