@@ -253,6 +253,7 @@ function rbSafe_(value) {
   return /^[\s\u0000-\u001f]*[=+@-]/.test(s) ? "'" + s : s;
 }
 function rbActor_() {
+  if (typeof RB_RENDER_CONTEXT_ !== "undefined" && RB_RENDER_CONTEXT_) return RB_RENDER_CONTEXT_.owner;
   const email = rbString_(
     Session.getActiveUser().getEmail(),
     320,

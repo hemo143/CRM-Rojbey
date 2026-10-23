@@ -1,3 +1,5 @@
+import { currentAccount } from "./accounts";
+import { sheetsEnabled } from "./sheets";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -23,9 +25,10 @@ function developmentSecret() {
   }
 }
 export const demoEnabled = () =>
-  process.env.CRM_DEMO_MODE === "true" ||
-  (process.env.NODE_ENV !== "production" &&
-    process.env.CRM_DEMO_MODE !== "false");
+  !sheetsEnabled() &&
+  (process.env.CRM_DEMO_MODE === "true" ||
+    (process.env.NODE_ENV !== "production" &&
+      process.env.CRM_DEMO_MODE !== "false"));
 function secret() {
   const s = process.env.CRM_SESSION_SECRET;
   if (process.env.NODE_ENV === "production" && (!s || s.length < 32))
@@ -51,6 +54,11 @@ export async function session(): Promise<Session | null> {
       !["admin", "staff"].includes(s.role) ||
       s.exp < Date.now() ||
       (s.demo && !demoEnabled())
+    )
+      return null;
+    if (
+      sheetsEnabled() &&
+      (process.env.CRM_DEMO_MODE !== "false" || s.demo || !currentAccount(s))
     )
       return null;
     return s;

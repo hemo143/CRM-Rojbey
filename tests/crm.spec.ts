@@ -128,3 +128,111 @@ test("unauthenticated API requests are rejected and mobile navigation fits", asy
     page.getByRole("heading", { name: "دفتر المواعيد" }),
   ).toBeVisible();
 });
+
+test("Sheets UI preserves imported vocabulary and retries an uncertain save with the same request ID", async ({
+  page,
+}) => {
+  const data = {
+    customers: [
+      {
+        id: "synthetic-sheet-1",
+        name: "عميلة اختبار الشيت",
+        phone: "",
+        channel: "",
+        username: "",
+        metaContactId: "",
+        lastMessage: "",
+        lastMessageAt: "",
+        notes: "",
+        status: "مستورد",
+        staff: "اسم تاريخي محفوظ",
+        service: "",
+        model: "",
+        createdAt: "",
+      },
+    ],
+    appointments: [],
+    followups: [],
+    activity: [],
+    sheet: {
+      lists: {
+        staff: [],
+        status: ["جديدة", "تم التواصل"],
+        channel: ["WhatsApp"],
+        service: ["بيع", "إيجار"],
+        model: ["A-Line"],
+        appointmentType: ["زيارة أولى"],
+        appointmentStatus: ["مؤكد", "ملغي"],
+      },
+      values: {
+        customerNew: "جديدة",
+        appointmentDefaultType: "زيارة أولى",
+        appointmentConfirmed: "مؤكد",
+      },
+      warnings: {},
+    },
+  };
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/auth", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: "synthetic-admin",
+          role: "admin",
+          name: "اختبار",
+          demo: false,
+          exp: Date.now() + 100000,
+        },
+        demo: false,
+      },
+    }),
+  );
+  await page.route("**/api/crm", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: data });
+    const p = route.request().postDataJSON();
+    writes.push(p);
+    if (writes.length === 1)
+      return route.fulfill({
+        status: 400,
+        json: { error: "تعذّر تأكيد الحفظ", pending: true },
+      });
+    data.customers[0].notes = p.notes;
+    return route.fulfill({ json: { ok: true, id: data.customers[0].id } });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByText("اعتماد قائمة الموظفات مؤجّل.", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "العميلات", exact: false })
+    .click();
+  await page
+    .getByRole("button", { name: "عميلة اختبار الشيت", exact: true })
+    .click();
+  await page.getByRole("button", { name: "تعديل الملف" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator('select[name="status"]')).toHaveValue("مستورد");
+  await expect(dialog.locator('select[name="staff"]')).toHaveValue(
+    "اسم تاريخي محفوظ",
+  );
+  await expect(dialog.locator('select[name="channel"]')).toHaveValue("");
+  await dialog
+    .getByLabel("الملاحظات", { exact: true })
+    .fill("ملاحظة اختبار الربط");
+  await dialog.getByRole("button", { name: "حفظ التفاصيل" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("تعذّر تأكيد");
+  await dialog
+    .getByRole("button", {
+      name: "إعادة محاولة الطلب السابق دون تغيير التفاصيل",
+    })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toEqual(writes[0]);
+  expect(writes[0].status).toBe("مستورد");
+  await expect(
+    page.getByText("ملاحظة اختبار الربط", { exact: true }),
+  ).toBeVisible();
+});

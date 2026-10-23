@@ -18,12 +18,13 @@ export type Customer = {
   name: string;
   phone: string;
   channel: string;
+  source?: string;
   username: string;
   metaContactId: string;
   lastMessage: string;
   lastMessageAt: string;
   notes: string;
-  status: Status;
+  status: string;
   staff: string;
   service: string;
   model: string;
@@ -34,10 +35,10 @@ export type Appointment = {
   customerId: string;
   date: string;
   time: string;
-  duration: number;
+  duration?: number;
   staff: string;
   type: string;
-  status: "مؤكد" | "ملغي" | "مكتمل";
+  status: string;
   notes: string;
 };
 export type Followup = {
@@ -47,6 +48,7 @@ export type Followup = {
   title: string;
   staff: string;
   done: boolean;
+  cancelled?: boolean;
 };
 export type Activity = {
   id: string;
@@ -60,9 +62,21 @@ export type Data = {
   appointments: Appointment[];
   followups: Followup[];
   activity: Activity[];
+  sheet?: {
+    lists: Record<string, string[]>;
+    values: Record<string, string>;
+    warnings: Record<string, number>;
+  };
 };
 export type Role = "admin" | "staff";
-export type Session = { role: Role; name: string; demo: boolean; exp: number };
+export type Session = {
+  role: Role;
+  name: string;
+  demo: boolean;
+  exp: number;
+  id?: string;
+  credentialVersion?: string;
+};
 export const cairoDate = () =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Cairo",
@@ -155,7 +169,7 @@ export function validateAppointment(
         a.status !== "ملغي" &&
         a.date === date &&
         (a.staff === staff || a.customerId === customerId) &&
-        start < minutes(a.time) + a.duration &&
+        start < minutes(a.time) + (a.duration || 60) &&
         start + duration > minutes(a.time),
     )
   )

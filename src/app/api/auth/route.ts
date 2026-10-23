@@ -1,3 +1,5 @@
+import { authenticateAccount } from "@/lib/accounts";
+import { sheetsEnabled, assertLiveMode } from "@/lib/sheets";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
@@ -12,7 +14,11 @@ export const runtime = "nodejs";
 const attempts = new Map<string, { count: number; until: number }>();
 export async function GET() {
   return NextResponse.json(
-    { user: await session(), demo: demoEnabled() },
+    {
+      user: await session(),
+      demo: demoEnabled(),
+      namedAccounts: sheetsEnabled(),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -30,7 +36,22 @@ export async function POST(request: Request) {
     const p = await request.json();
     const role: Role = p.role === "admin" ? "admin" : "staff";
     const demo = p.demo === true && demoEnabled();
-    if (!demo) {
+    assertLiveMode();
+    const account = sheetsEnabled()
+      ? authenticateAccount(p.username, p.password)
+      : null;
+    if (sheetsEnabled() && !account) {
+      const old = attempts.get(key);
+      attempts.set(key, {
+        count: old && old.until > Date.now() ? old.count + 1 : 1,
+        until: old && old.until > Date.now() ? old.until : Date.now() + 900000,
+      });
+      return NextResponse.json(
+        { error: "بيانات الدخول غير صحيحة" },
+        { status: 401 },
+      );
+    }
+    if (!demo && !sheetsEnabled()) {
       const expected =
         role === "admin"
           ? process.env.CRM_ADMIN_PASSWORD
@@ -54,6 +75,7 @@ export async function POST(request: Request) {
       demo,
       exp: Date.now() + 8 * 60 * 60 * 1000,
     };
+    if (account) Object.assign(user, account);
     const token = encodeSession(user);
     (await cookies()).set("rojbey_session", token, {
       httpOnly: true,

@@ -14,12 +14,17 @@ function onOpen() {
     .addToUi();
 }
 function doGet() {
+  if (rbProps_().getProperty("RB_RENDER_ENABLED") === "true")
+    return HtmlService.createHtmlOutput("ROJBEY server bridge. Open the CRM on Render.");
+  return rbHtml_();
+}
+function rbHtml_() {
   return HtmlService.createHtmlOutputFromFile("Index")
     .setTitle("ROJBEY | Bridal CRM")
     .addMetaTag("viewport", "width=device-width,initial-scale=1");
 }
 function RB_openSidebar() {
-  SpreadsheetApp.getUi().showSidebar(doGet());
+  SpreadsheetApp.getUi().showSidebar(rbHtml_());
 }
 function RB_bindSpreadsheet() {
   const active = SpreadsheetApp.getActiveSpreadsheet();
@@ -68,7 +73,8 @@ function rbLog_(action, id, actor, requestId) {
   });
 }
 function rbWrite_(action, p, planner) {
-  const actor = rbAuthorize_();
+  const authorized = rbAuthorize_();
+  const actor = typeof RB_RENDER_CONTEXT_ !== "undefined" && RB_RENDER_CONTEXT_ ? RB_RENDER_CONTEXT_.actor : authorized;
   return rbLocked_(() => {
     rbReady_();
     if (!p || typeof p !== "object") throw Error("طلب غير صحيح");

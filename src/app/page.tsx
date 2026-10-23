@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
 import {
-  channels,
-  statuses,
+  channels as demoChannels,
+  statuses as demoStatuses,
   cairoDate,
   type Data,
   type Customer,
@@ -26,7 +26,7 @@ const navigation: [View, string, string][] = [
   ["messages", "المحادثات", "⋯"],
   ["staff", "الفريق والصلاحيات", "⌘"],
 ];
-const staffNames = ["فريق الأتيليه", "مديرة الأتيليه"];
+const demoStaffNames = ["فريق الأتيليه", "مديرة الأتيليه"];
 const number = (n: number) => new Intl.NumberFormat("ar-EG").format(n);
 const dateLabel = (date: string) =>
   date
@@ -49,6 +49,7 @@ function Mark() {
 export default function Home() {
   const [user, setUser] = useState<Session | null>(null),
     [demo, setDemo] = useState(false),
+    [individual, setIndividual] = useState(false),
     [loading, setLoading] = useState(true),
     [data, setData] = useState<Data | null>(null),
     [view, setView] = useState<View>("dashboard"),
@@ -62,7 +63,14 @@ export default function Home() {
     [editing, setEditing] = useState<Customer | Appointment | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [pending, setPending] = useState<Record<string, unknown> | null>(null);
+  const live = !!data?.sheet;
+  const lists = data?.sheet?.lists;
+  const staffNames = live ? lists?.staff || [] : demoStaffNames;
+  const statuses = live ? lists?.status || [] : [...demoStatuses];
+  const channels = live ? lists?.channel || [] : [...demoChannels];
+  const newStatus = data?.sheet?.values.customerNew || "جديدة";
   async function load() {
     const res = await fetch("/api/crm");
     const body = await res.json();
@@ -76,6 +84,7 @@ export default function Home() {
         const a = await r.json();
         setUser(a.user);
         setDemo(a.demo);
+        setIndividual(a.namedAccounts === true);
         if (a.user) await load();
       } catch {
         setError("تعذّر تحميل البيانات. أعيدي المحاولة.");
@@ -142,6 +151,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           role: f.get("role"),
+          username: f.get("username"),
           password: f.get("password"),
           demo: f.get("demo") === "true",
         }),
@@ -180,15 +190,39 @@ export default function Home() {
     }
   }
   async function mutate(p: Record<string, unknown>) {
+    if (pending && p !== pending)
+      throw Error(
+        "توجد عملية لم يتأكد حفظها. استخدمي إعادة محاولة الطلب السابق قبل عملية جديدة.",
+      );
+    const payload = p.requestId ? p : { ...p, requestId: crypto.randomUUID() };
+    if (live) setPending(payload);
     const r = await fetch("/api/crm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
+      body: JSON.stringify(payload),
     });
     const b = await r.json();
-    if (!r.ok) throw Error(b.error);
+    if (!r.ok) {
+      if (!b.pending) setPending(null);
+      throw Error(b.error);
+    }
     await load();
+    setPending(null);
     setNotice("تم حفظ التغييرات.");
+  }
+  async function retryPending() {
+    if (!pending) return;
+    setBusy(true);
+    setError("");
+    try {
+      await mutate(pending);
+      setModal(null);
+      setEditing(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
   function open(
     kind: "customer" | "appointment" | "followup",
@@ -203,13 +237,21 @@ export default function Home() {
     selected = data?.customers.find((c) => c.id === profile),
     upcoming =
       data?.appointments
-        .filter((a) => a.status === "مؤكد" && a.date >= today)
+        .filter(
+          (a) =>
+            (live
+              ? a.status !== data?.sheet?.values.appointmentCancelled
+              : a.status === "مؤكد") && a.date >= today,
+        )
         .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)) || [],
-    due = data?.followups.filter((t) => !t.done && t.due <= today) || [],
+    due =
+      data?.followups.filter(
+        (t) => !t.done && !t.cancelled && t.due <= today,
+      ) || [],
     filtered =
       data?.customers.filter(
         (c) =>
-          (view !== "leads" || c.status === "جديدة") &&
+          (view !== "leads" || c.status === newStatus) &&
           (!search ||
             [c.name, c.phone, c.username].some((v) =>
               v.toLowerCase().includes(search.toLowerCase()),
@@ -252,10 +294,14 @@ export default function Home() {
           <form onSubmit={login}>
             <label>
               الحساب
-              <select name="role">
-                <option value="admin">مديرة الأتيليه</option>
-                <option value="staff">فريق الأتيليه</option>
-              </select>
+              {!individual ? (
+                <select name="role">
+                  <option value="admin">مديرة الأتيليه</option>
+                  <option value="staff">فريق الأتيليه</option>
+                </select>
+              ) : (
+                <input name="username" required autoComplete="username" />
+              )}
             </label>
             {demo ? (
               <>
@@ -321,7 +367,9 @@ export default function Home() {
         </nav>
         <div className="sidebar-bottom">
           <span className="connection-dot" />
-          مصدر البيانات: محلي<small>Google Sheets غير متصل</small>
+          مصدر البيانات:{" "}
+          {live ? "Google Sheets" : data ? "محلي" : "لم يُحمّل بعد"}
+          <small>{live ? "متصل عبر الخادم" : "Google Sheets غير متصل"}</small>
           <div className="user">
             <span className="avatar">ر</span>
             <div>
@@ -377,6 +425,17 @@ export default function Home() {
                 ×
               </button>
             </div>
+          )}
+          {live && !staffNames.length && (
+            <div className="notice">
+              اعتماد قائمة الموظفات مؤجّل. يمكن عرض الملفات وتعديلها؛ الإسناد
+              الجديد للمواعيد والمتابعات ينتظر اعتماد القائمة.
+            </div>
+          )}
+          {pending && !modal && (
+            <button disabled={busy} onClick={retryPending}>
+              إعادة محاولة الطلب السابق
+            </button>
           )}
           {selected ? (
             <>
@@ -458,7 +517,13 @@ export default function Home() {
                           {t.title}
                           <small>{dateLabel(t.due)}</small>
                         </div>
-                        <span>{t.done ? "مكتملة" : "بانتظار المتابعة"}</span>
+                        <span>
+                          {t.cancelled
+                            ? "ملغاة"
+                            : t.done
+                              ? "مكتملة"
+                              : "بانتظار المتابعة"}
+                        </span>
                       </div>
                     ))}
                   <button className="outline" onClick={() => open("followup")}>
@@ -539,14 +604,19 @@ export default function Home() {
                       ],
                       [
                         "الاستفسارات الجديدة",
-                        data?.customers.filter((c) => c.status === "جديدة")
+                        data?.customers.filter((c) => c.status === newStatus)
                           .length || 0,
                         "بداية حكاية جديدة",
                       ],
                       [
                         "مواعيد اليوم",
                         data?.appointments.filter(
-                          (a) => a.date === today && a.status === "مؤكد",
+                          (a) =>
+                            a.date === today &&
+                            (live
+                              ? a.status !==
+                                data?.sheet?.values.appointmentCancelled
+                              : a.status === "مؤكد"),
                         ).length || 0,
                         "لحظات تستحق العناية",
                       ],
@@ -674,7 +744,12 @@ export default function Home() {
                       onChange={(e) => setStatus(e.target.value)}
                     >
                       <option value="">كل الحالات</option>
-                      {statuses.map((s) => (
+                      {[
+                        ...new Set([
+                          ...statuses,
+                          ...(data?.customers.map((c) => c.status) || []),
+                        ]),
+                      ].map((s) => (
                         <option key={s}>{s}</option>
                       ))}
                     </select>
@@ -684,7 +759,12 @@ export default function Home() {
                       onChange={(e) => setChannel(e.target.value)}
                     >
                       <option value="">كل القنوات</option>
-                      {channels.map((c) => (
+                      {[
+                        ...new Set([
+                          ...channels,
+                          ...(data?.customers.map((c) => c.channel) || []),
+                        ]),
+                      ].map((c) => (
                         <option key={c}>{c}</option>
                       ))}
                     </select>
@@ -739,7 +819,11 @@ export default function Home() {
                               </td>
                               <td>{a.type}</td>
                               <td>{a.staff}</td>
-                              <td>{number(a.duration)} دقيقة</td>
+                              <td>
+                                {a.duration
+                                  ? `${number(a.duration)} دقيقة`
+                                  : "غير محددة"}
+                              </td>
                               <td>
                                 <span className="badge">{a.status}</span>
                               </td>
@@ -782,7 +866,7 @@ export default function Home() {
                       >
                         <button
                           className="check"
-                          disabled={t.done || busy}
+                          disabled={t.done || t.cancelled || busy}
                           aria-label={"إكمال " + t.title}
                           onClick={async () => {
                             setBusy(true);
@@ -798,7 +882,7 @@ export default function Home() {
                             }
                           }}
                         >
-                          {t.done ? "✓" : ""}
+                          {t.done ? "✓" : t.cancelled ? "×" : ""}
                         </button>
                         <button
                           className="row-link"
@@ -812,11 +896,13 @@ export default function Home() {
                           </small>
                         </button>
                         <span className="badge">
-                          {t.done
-                            ? "مكتملة"
-                            : t.due <= today
-                              ? "مستحقة"
-                              : "قادمة"}
+                          {t.cancelled
+                            ? "ملغاة"
+                            : t.done
+                              ? "مكتملة"
+                              : t.due <= today
+                                ? "مستحقة"
+                                : "قادمة"}
                         </span>
                       </div>
                     ))}
@@ -848,8 +934,9 @@ export default function Home() {
                 <section className="panel">
                   <h2>أدوار الفريق</h2>
                   <p className="muted">
-                    نسخة أولية بحسابين وظيفيين. إدارة حساب مستقل لكل موظفة لم
-                    تُنفّذ بعد.
+                    {live
+                      ? "حسابات دخول فردية تُدار من إعدادات الخادم. قائمة إسناد الموظفات في الشيت مستقلة وما زالت مؤجّلة."
+                      : "حسابان للتجربة ببيانات وهمية."}
                   </p>
                   <div className="table-wrap">
                     <table>
@@ -879,7 +966,7 @@ export default function Home() {
                   <p className="demo-note">
                     {user.demo
                       ? "اختيار الدور في النسخة التجريبية مفتوح. لا يمثل مصادقة مناسبة لبيانات حقيقية."
-                      : "تُضبط كلمات مرور الحسابات من البيئة. استخدام الإنترنت العام يحتاج HTTPS ومراجعة أمنية وإدارة هويات فردية."}
+                      : "الحسابات والأدوار محددة على الخادم. لا يمكن اختيار صلاحية أعلى من شاشة الدخول."}
                   </p>
                 </section>
               )}
@@ -933,6 +1020,11 @@ export default function Home() {
                 {error}
               </p>
             )}
+            {pending && (
+              <button disabled={busy} onClick={retryPending}>
+                إعادة محاولة الطلب السابق دون تغيير التفاصيل
+              </button>
+            )}
             <form onSubmit={save}>
               <div className="form-grid">
                 {modal === "customer" ? (
@@ -965,7 +1057,9 @@ export default function Home() {
                       name="staff"
                       label="الموظفة"
                       values={staffNames}
-                      value={(editing as Customer)?.staff || user.name}
+                      value={
+                        (editing as Customer)?.staff ?? (live ? "" : user.name)
+                      }
                     />
                     <Select
                       name="channel"
@@ -977,31 +1071,39 @@ export default function Home() {
                       name="status"
                       label="حالة الاستفسار"
                       values={[...statuses]}
-                      value={(editing as Customer)?.status}
+                      value={(editing as Customer)?.status ?? newStatus}
                     />
                     <Select
                       name="service"
                       label="الخدمة"
-                      values={["إيجار", "شراء", "لم تحدد"]}
+                      values={
+                        live
+                          ? lists?.service || []
+                          : ["إيجار", "شراء", "لم تحدد"]
+                      }
                       value={(editing as Customer)?.service}
                     />
                     <Select
                       name="model"
                       label="قصة الفستان"
-                      values={[
-                        "A-Line",
-                        "Mermaid",
-                        "Princess",
-                        "Satin",
-                        "لم تحدد",
-                      ]}
+                      values={
+                        live
+                          ? lists?.model || []
+                          : [
+                              "A-Line",
+                              "Mermaid",
+                              "Princess",
+                              "Satin",
+                              "لم تحدد",
+                            ]
+                      }
                       value={(editing as Customer)?.model}
                     />
                     <label>
                       تاريخ آخر رسالة
                       <input
                         name="lastMessageAt"
-                        type="date"
+                        type={live ? "text" : "date"}
                         defaultValue={(editing as Customer)?.lastMessageAt}
                       />
                     </label>
@@ -1068,37 +1170,56 @@ export default function Home() {
                             }
                           />
                         </label>
-                        <label>
-                          المدة بالدقائق
-                          <input
-                            type="number"
-                            name="duration"
-                            min="15"
-                            max="240"
-                            step="15"
-                            required
-                            defaultValue={
-                              (editing as Appointment)?.duration || 60
-                            }
-                          />
-                        </label>
+                        {!live && (
+                          <label>
+                            المدة بالدقائق
+                            <input
+                              type="number"
+                              name="duration"
+                              min="15"
+                              max="240"
+                              step="15"
+                              required
+                              defaultValue={
+                                (editing as Appointment)?.duration || 60
+                              }
+                            />
+                          </label>
+                        )}
                         <Select
                           name="type"
                           label="نوع الموعد"
-                          values={["قياس أول", "بروفة", "استلام", "استشارة"]}
-                          value={(editing as Appointment)?.type}
+                          values={
+                            live
+                              ? lists?.appointmentType || []
+                              : ["قياس أول", "بروفة", "استلام", "استشارة"]
+                          }
+                          value={
+                            (editing as Appointment)?.type ??
+                            data?.sheet?.values.appointmentDefaultType
+                          }
                         />
                         <Select
                           name="status"
                           label="الحالة"
-                          values={["مؤكد", "مكتمل", "ملغي"]}
-                          value={(editing as Appointment)?.status}
+                          values={
+                            live
+                              ? lists?.appointmentStatus || []
+                              : ["مؤكد", "مكتمل", "ملغي"]
+                          }
+                          value={
+                            (editing as Appointment)?.status ??
+                            data?.sheet?.values.appointmentConfirmed
+                          }
                         />
                         <Select
                           name="staff"
                           label="الموظفة"
                           values={staffNames}
-                          value={(editing as Appointment)?.staff || user.name}
+                          value={
+                            (editing as Appointment)?.staff ??
+                            (live ? "" : user.name)
+                          }
                         />
                         <label className="full">
                           ملاحظات
@@ -1133,7 +1254,7 @@ export default function Home() {
                           name="staff"
                           label="الموظفة"
                           values={staffNames}
-                          value={user.name}
+                          value={live ? "" : user.name}
                         />
                       </>
                     )}
@@ -1177,8 +1298,13 @@ function Select({
   return (
     <label>
       {label}
-      <select name={name} defaultValue={value || values[0]}>
-        {values.map((v) => (
+      <select name={name} defaultValue={value ?? values[0] ?? ""}>
+        {(value !== undefined && !values.includes(value)
+          ? [value, ...values]
+          : values.length
+            ? values
+            : [""]
+        ).map((v) => (
           <option key={v}>{v}</option>
         ))}
       </select>

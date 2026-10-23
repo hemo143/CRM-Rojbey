@@ -1,3 +1,10 @@
+import {
+  SheetCallError,
+  sheetsEnabled,
+  sheetCall,
+  sheetOperation,
+  mapSheetData,
+} from "@/lib/sheets";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { session, sameOrigin } from "@/lib/auth";
@@ -11,12 +18,18 @@ import {
 } from "@/lib/domain";
 export const runtime = "nodejs";
 export async function GET() {
-  if (!(await session()))
+  const user = await session();
+  if (!user)
     return NextResponse.json({ error: "سجّلي الدخول أولًا" }, { status: 401 });
   try {
-    return NextResponse.json(await repository().read(), {
-      headers: { "Cache-Control": "no-store" },
-    });
+    return NextResponse.json(
+      sheetsEnabled()
+        ? mapSheetData(await sheetCall("read", {}, user))
+        : await repository().read(),
+      {
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   } catch {
     return NextResponse.json(
       { error: "تعذّر قراءة البيانات؛ راجعي إعداد مصدر البيانات" },
@@ -37,6 +50,13 @@ export async function POST(request: Request) {
         { error: "تعديل ملف العميلة متاح للمديرة فقط" },
         { status: 403 },
       );
+    if (sheetsEnabled()) {
+      const operation = sheetOperation(p);
+      const result = await sheetCall(operation.method, operation.payload, user);
+      return NextResponse.json(result, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     const result = await repository().mutate((data) => {
       let customerId = "",
         message = "";
@@ -103,7 +123,10 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "تعذّر حفظ البيانات" },
+      {
+        error: e instanceof Error ? e.message : "تعذّر حفظ البيانات",
+        pending: e instanceof SheetCallError && e.pending,
+      },
       { status: 400 },
     );
   }
