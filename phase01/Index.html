@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        --night: #16171c;
+        --pearl: #f7f3ea;
+        --gold: #97822f;
+        --line: #dcd2bd;
+        --muted: #5b5a60;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--pearl);
+        color: var(--night);
+        font:
+          14px/1.8 Tahoma,
+          Arial,
+          sans-serif;
+      }
+      header {
+        background: var(--night);
+        color: var(--pearl);
+        padding: 22px 5%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      header strong {
+        font:
+          24px Georgia,
+          serif;
+        letter-spacing: 4px;
+        color: #c9b77e;
+      }
+      header small {
+        display: block;
+        font-size: 10px;
+        color: #c9b77e;
+      }
+      main {
+        max-width: 1300px;
+        margin: auto;
+        padding: 25px 4%;
+      }
+      nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 16px;
+        margin-bottom: 24px;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: transparent;
+        padding: 8px 14px;
+        color: var(--night);
+      }
+      button.active,
+      .primary {
+        background: var(--night);
+        color: var(--pearl);
+        border-color: var(--night);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      button:focus-visible,
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
+      }
+      h1,
+      h2 {
+        font-weight: 400;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 10px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0 0 15px;
+      }
+      .muted,
+      small {
+        color: var(--muted);
+      }
+      .heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+        margin: 20px 0;
+      }
+      .card,
+      .panel {
+        border: 1px solid var(--line);
+        background: #fcfaf5;
+        padding: 20px;
+      }
+      .card strong {
+        display: block;
+        font-size: 34px;
+        color: #6e5e22;
+        font-weight: 400;
+      }
+      .card span {
+        font-size: 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+      }
+      .row small {
+        display: block;
+      }
+      .tablewrap {
+        overflow: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        white-space: nowrap;
+        text-align: right;
+      }
+      td,
+      th {
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+      }
+      th {
+        font-weight: 400;
+        background: #ede6d6;
+      }
+      .filters {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      .filters input {
+        flex: 1;
+      }
+      .filters select {
+        max-width: 170px;
+      }
+      input,
+      select,
+      textarea {
+        font: inherit;
+        min-width: 0;
+        width: 100%;
+        padding: 9px;
+        border: 1px solid var(--line);
+        background: #fcfaf5;
+        color: var(--night);
+      }
+      textarea {
+        min-height: 95px;
+        resize: vertical;
+      }
+      label {
+        display: grid;
+        gap: 5px;
+        font-size: 12px;
+      }
+      .error,
+      .message,
+      .warning {
+        border: 1px solid var(--gold);
+        padding: 13px;
+        margin-bottom: 15px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .error {
+        border-right: 4px solid var(--night);
+      }
+      .hidden {
+        display: none !important;
+      }
+      .tag {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 2px 10px;
+        font-size: 11px;
+        display: inline-block;
+      }
+      .link {
+        border: 0;
+        color: #6e5e22;
+        padding: 4px;
+        background: none;
+        text-decoration: underline;
+      }
+      .empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+      dialog {
+        border: 1px solid var(--gold);
+        background: var(--pearl);
+        color: var(--night);
+        padding: 25px;
+        width: 650px;
+        max-width: 94vw;
+        max-height: 90vh;
+        overflow: auto;
+      }
+      dialog::backdrop {
+        background: #16171caa;
+      }
+      .formgrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+      .full {
+        grid-column: 1/-1;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 0;
+        min-width: 0;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+      .detail {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 15px;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 0;
+        overflow-wrap: anywhere;
+      }
+      .pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .spacer {
+        margin-top: 20px;
+      }
+      .badge {
+        font-size: 10px;
+        border: 1px solid #97822f;
+        padding: 5px 10px;
+        color: var(--pearl);
+      }
+      .checkbox {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .checkbox input {
+        width: 20px;
+        flex-shrink: 0;
+      }
+      .footer {
+        font-size: 10px;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        padding-top: 15px;
+        margin-top: 30px;
+      }
+      .pager {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 15px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+      }
+      @media (max-width: 700px) {
+        header {
+          padding: 16px;
+        }
+        .badge {
+          display: none;
+        }
+        .cards {
+          grid-template-columns: 1fr 1fr;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .filters {
+          flex-wrap: wrap;
+        }
+        .filters input {
+          flex-basis: 100%;
+        }
+        .filters select {
+          max-width: none;
+          flex: 1;
+        }
+        .heading {
+          flex-wrap: wrap;
+        }
+        .formgrid {
+          grid-template-columns: 1fr;
+        }
+        .detail {
+          grid-template-columns: 100px 1fr;
+        }
+        .card {
+          padding: 14px;
+        }
+        nav button {
+          padding: 6px 10px;
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div><strong>ROJBEY</strong><small>مساحة الأتيليه · Phase 01</small></div>
+      <span class="badge">Google Sheets + Apps Script</span>
+    </header>
+    <main>
+      <nav aria-label="أقسام CRM">
+        <button data-view="dashboard" class="active">لوحة الإدارة</button
+        ><button data-view="customers">العميلات</button
+        ><button data-view="appointments">المواعيد</button
+        ><button data-view="tasks">المتابعات</button
+        ><button id="reload">تحديث من الشيت</button>
+      </nav>
+      <div id="error" class="error hidden" role="alert"></div>
+      <div id="message" class="message hidden" role="status"></div>
+      <div id="loading" role="status">جارٍ قراءة Google Sheet…</div>
+      <div id="warning" class="warning hidden"></div>
+      <section id="content"></section>
+      <footer class="footer">
+        ROJBEY · المصدر هو الشيت المرتبط بالمشروع. لا توجد بيانات تجريبية أو ربط
+        Meta أو مدفوعات آلية.
+      </footer>
+    </main>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <div class="heading">
+        <h2 id="dialog-title"></h2>
+        <button id="close-dialog" aria-label="إغلاق">×</button>
+      </div>
+      <p id="form-error" class="error hidden" role="alert"></p>
+      <form id="form">
+        <fieldset id="fields">
+          <div class="formgrid" id="formgrid"></div>
+          <label id="duplicate-confirm" class="checkbox full hidden spacer"
+            ><input type="checkbox" name="confirmSeparateCustomer" /><span
+              >راجعت السجل الموجود وتأكدت أنها عميلة مختلفة فعلًا تشترك في نفس
+              الهاتف. أنشئي سجلًا مستقلًا دون دمج.</span
+            ></label
+          >
+        </fieldset>
+        <div class="actions">
+          <button type="submit" class="primary" id="save">
+            حفظ في Google Sheet</button
+          ><button type="button" id="retry" class="hidden">
+            إعادة نفس الطلب المعلّق</button
+          ><button type="button" id="cancel">إلغاء</button>
+        </div>
+      </form>
+    </dialog>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id),
+        state = {
+          data: null,
+          view: "dashboard",
+          profile: null,
+          search: "",
+          status: "",
+          source: "",
+          taskView: "open",
+          page: 0,
+          busy: false,
+          form: null,
+          pending: null,
+        };
+      function el(tag, text, cls) {
+        const n = document.createElement(tag);
+        if (text !== undefined) n.textContent = String(text);
+        if (cls) n.className = cls;
+        return n;
+      }
+      function clear(id) {
+        const n = $(id);
+        n.replaceChildren();
+        return n;
+      }
+      function show(id, text) {
+        $(id).textContent = text || "";
+        $(id).classList.toggle("hidden", !text);
+      }
+      function button(text, handler, cls) {
+        const n = el("button", text, cls);
+        n.type = "button";
+        n.onclick = handler;
+        return n;
+      }
+      function request(fn, payload) {
+        return new Promise((resolve, reject) => {
+          if (!window.google || !google.script || !google.script.run) {
+            reject(
+              Error(
+                "هذه الواجهة تعمل من Google Apps Script فقط. لا يوجد اتصال محلي أو مصدر بيانات بديل.",
+              ),
+            );
+            return;
+          }
+          const runner = google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler((error) =>
+              reject(Error(error.message || String(error))),
+            );
+          if (payload === undefined) runner[fn]();
+          else runner[fn](payload);
+        });
+      }
+      async function reload() {
+        show("error", "");
+        $("loading").classList.remove("hidden");
+        try {
+          state.data = await request("RB_getData");
+          const w = state.data.warnings;
+          show(
+            "warning",
+            w.duplicateCustomerIds ||
+              w.customersWithoutIds ||
+              w.invalidDates ||
+              w.orphanAppointments ||
+              w.orphanTasks
+              ? "مطلوب تدقيق: " +
+                  w.duplicateCustomerIds +
+                  " معرّف عميلة مكرر، " +
+                  w.customersWithoutIds +
+                  " عميلة بلا معرّف، " +
+                  w.invalidDates +
+                  " تاريخ غير صالح، " +
+                  w.orphanAppointments +
+                  " موعد و" +
+                  w.orphanTasks +
+                  " متابعة بلا ربط صحيح. لا يتم إصلاح السجلات أو تخمين العلاقات تلقائيًا."
+              : "",
+          );
+          render();
+        } catch (e) {
+          show("error", e.message + "\nلم يتم تحميل بيانات بديلة.");
+        } finally {
+          $("loading").classList.add("hidden");
+        }
+      }
+      function customer(id) {
+        return state.data.customers.find((c) => c.id === id);
+      }
+      function count(v) {
+        return Number(v).toLocaleString("ar-EG");
+      }
+      function row(label, detail, action) {
+        const n = el("div", undefined, "row"),
+          text = el("div");
+        text.append(el("span", label), el("small", detail));
+        n.append(text);
+        if (action) n.append(action);
+        return n;
+      }
+      function panel(title) {
+        const n = el("section", undefined, "panel");
+        n.append(el("h2", title));
+        return n;
+      }
+      function empty(container, text) {
+        container.append(el("div", text, "empty"));
+      }
+      function openProfile(id) {
+        if (
+          id &&
+          state.data.customers.filter((c) => c.id === id).length !== 1
+        ) {
+          show(
+            "error",
+            "Customer ID غير فريد أو غير موجود؛ راجعي التدقيق دون دمج تلقائي.",
+          );
+          return;
+        }
+        if (!id) {
+          show(
+            "error",
+            "الصف بلا Customer ID. من الشيت حددي الصف ثم اختاري «اعتماد صف عميلة محدد» بعد مراجعته.",
+          );
+          return;
+        }
+        state.profile = id;
+        render();
+      }
+      function heading(title, action) {
+        const n = el("div", undefined, "heading");
+        n.append(el("h1", title));
+        if (action) n.append(action);
+        return n;
+      }
+      function table(headers, rows) {
+        const wrap = el("div", undefined, "tablewrap"),
+          t = el("table"),
+          head = el("thead"),
+          tr = el("tr"),
+          body = el("tbody");
+        headers.forEach((h) => tr.append(el("th", h)));
+        head.append(tr);
+        rows.forEach((values) => {
+          const r = el("tr");
+          values.forEach((v) => {
+            const td = el("td");
+            td.append(
+              v instanceof Node ? v : document.createTextNode(String(v || "—")),
+            );
+            r.append(td);
+          });
+          body.append(r);
+        });
+        t.append(head, body);
+        wrap.append(t);
+        if (!rows.length) empty(wrap, "لا توجد سجلات مطابقة.");
+        return wrap;
+      }
+      function render() {
+        if (!state.data) return;
+        const d = state.data,
+          c = clear("content");
+        document
+          .querySelectorAll("[data-view]")
+          .forEach((b) =>
+            b.classList.toggle("active", b.dataset.view === state.view),
+          );
+        if (state.profile) {
+          renderProfile(c);
+          return;
+        }
+        if (state.view === "dashboard") {
+          c.append(heading("يوم الأتيليه. من بيانات الشيت."));
+          const cards = el("div", undefined, "cards");
+          [
+            ["customers", "إجمالي العميلات"],
+            ["newInquiries", "بالحالة الجديدة حاليًا"],
+            ["appointmentsToday", "مواعيد اليوم"],
+            ["overdueTasks", "متابعات متأخرة"],
+            ["tasksToday", "متابعات اليوم"],
+            ["upcomingAppointments", "مواعيد بعد اليوم"],
+            ["openTasks", "متابعات مفتوحة"],
+            ["completedTasks", "متابعات مكتملة"],
+          ].forEach(([k, label]) => {
+            const card = el("div", undefined, "card");
+            card.append(el("span", label), el("strong", count(d.stats[k])));
+            cards.append(card);
+          });
+          c.append(cards);
+          const grid = el("div", undefined, "grid"),
+            ap = panel("مواعيد اليوم"),
+            tasks = panel("متابعات اليوم والمتأخر");
+          const appts = d.appointments.filter(
+            (a) =>
+              a.date === d.today &&
+              a.status !== d.config.values.appointmentCancelled,
+          );
+          appts.forEach((a) =>
+            ap.append(
+              row(
+                (customer(a.customerId) || {}).name || "ربط غير صحيح",
+                a.time + " · " + a.type + " · " + a.staff,
+                button("الملف", () => openProfile(a.customerId), "link"),
+              ),
+            ),
+          );
+          if (!appts.length) empty(ap, "لا توجد مواعيد اليوم.");
+          const due = d.tasks.filter(
+            (t) =>
+              t.status !== d.config.values.taskComplete &&
+              /^\d{4}-\d{2}-\d{2}$/.test(t.due) &&
+              t.due <= d.today,
+          );
+          due.forEach((t) =>
+            tasks.append(
+              row(
+                (customer(t.customerId) || {}).name || "ربط غير صحيح",
+                t.title + " · " + t.due,
+                button("الملف", () => openProfile(t.customerId), "link"),
+              ),
+            ),
+          );
+          if (!due.length) empty(tasks, "لا توجد متابعات مستحقة.");
+          grid.append(ap, tasks);
+          c.append(grid);
+          const note = panel("نطاق Phase 01");
+          note.classList.add("spacer");
+          note.append(
+            el(
+              "p",
+              "المبيعات والإيجارات والمدفوعات والتسليم تحتاج فحص المصدر وتأكيد قواعد التشغيل قبل التنفيذ. لا تعتبر الزيارات أو الاهتمام بفستان عملية بيع.",
+            ),
+          );
+          c.append(note);
+        } else if (state.view === "customers") {
+          c.append(
+            heading(
+              "العميلات",
+              button("إضافة عميلة", () => openForm("customer"), "primary"),
+            ),
+          );
+          const filters = el("div", undefined, "filters"),
+            search = el("input");
+          search.placeholder = "الاسم، الموبايل أو المعرّف";
+          search.setAttribute("aria-label", "البحث عن عميلة");
+          search.value = state.search;
+          search.oninput = () => {
+            state.search = search.value;
+            state.page = 0;
+            renderCustomersRows();
+          };
+          filters.append(search);
+          ["status", "source"].forEach((key) => {
+            const s = el("select");
+            s.setAttribute(
+              "aria-label",
+              key === "status" ? "فلترة الحالة" : "فلترة المصدر",
+            );
+            s.append(
+              new Option(key === "status" ? "كل الحالات" : "كل المصادر", ""),
+            );
+            const values = [
+              ...new Set(d.customers.map((c) => c[key]).filter(Boolean)),
+            ];
+            values.forEach((v) => s.append(new Option(v, v)));
+            s.value = state[key];
+            s.onchange = () => {
+              state[key] = s.value;
+              state.page = 0;
+              renderCustomersRows();
+            };
+            filters.append(s);
+          });
+          c.append(filters, el("div", undefined, "panel"));
+          c.lastChild.id = "customer-table";
+          renderCustomersRows();
+        } else if (state.view === "appointments") {
+          c.append(
+            heading(
+              "دفتر المواعيد",
+              button("حجز موعد", () => openForm("appointment"), "primary"),
+            ),
+          );
+          c.append(
+            el(
+              "p",
+              "توقيت القاهرة. فحص التعارض لنفس وقت البداية فقط؛ لا توجد مدة جلسة معتمدة في المصدر.",
+              "muted",
+            ),
+          );
+          c.append(
+            table(
+              ["العميلة", "التاريخ", "الوقت", "النوع", "الموظفة", "الحالة", ""],
+              d.appointments
+                .slice()
+                .sort((a, b) =>
+                  (a.date + a.time).localeCompare(b.date + b.time),
+                )
+                .map((a) => [
+                  button(
+                    (customer(a.customerId) || {}).name || "ربط غير صحيح",
+                    () => openProfile(a.customerId),
+                    "link",
+                  ),
+                  a.date,
+                  a.time,
+                  a.type,
+                  a.staff,
+                  a.status,
+                  button("تعديل", () => openForm("appointment", a), "link"),
+                ]),
+            ),
+          );
+        } else if (state.view === "tasks") {
+          c.append(
+            heading(
+              "المتابعات",
+              button("إضافة متابعة", () => openForm("task"), "primary"),
+            ),
+          );
+          const options = el("select");
+          options.setAttribute("aria-label", "عرض المتابعات");
+          [
+            ["open", "كل المفتوحة"],
+            ["today", "اليوم"],
+            ["overdue", "المتأخرة"],
+            ["upcoming", "القادمة"],
+            ["complete", "المكتملة"],
+          ].forEach(([v, label]) => options.append(new Option(label, v)));
+          options.value = state.taskView;
+          options.onchange = () => {
+            state.taskView = options.value;
+            render();
+          };
+          c.append(options);
+          const tasks = d.tasks
+            .filter((t) => {
+              const done = t.status === d.config.values.taskComplete;
+              return state.taskView === "complete"
+                ? done
+                : !done &&
+                    (state.taskView === "open" ||
+                      (state.taskView === "today" && t.due === d.today) ||
+                      (state.taskView === "overdue" &&
+                        /^\d{4}-\d{2}-\d{2}$/.test(t.due) &&
+                        t.due < d.today) ||
+                      (state.taskView === "upcoming" && t.due > d.today));
+            })
+            .sort((a, b) => a.due.localeCompare(b.due));
+          c.append(
+            table(
+              ["العميلة", "المهمة", "الموظفة", "الاستحقاق", "الحالة", ""],
+              tasks.map((t) => [
+                button(
+                  (customer(t.customerId) || {}).name || "ربط غير صحيح",
+                  () => openProfile(t.customerId),
+                  "link",
+                ),
+                t.title,
+                t.staff,
+                t.due,
+                t.status,
+                t.status === d.config.values.taskComplete
+                  ? "مكتملة"
+                  : button("إكمال", () => completeTask(t), "link"),
+              ]),
+            ),
+          );
+        }
+      }
+      function renderCustomersRows() {
+        const d = state.data,
+          rows = d.customers.filter(
+            (c) =>
+              (!state.search ||
+                [c.name, c.phone, c.id].some((v) =>
+                  v.toLowerCase().includes(state.search.toLowerCase()),
+                )) &&
+              (!state.status || c.status === state.status) &&
+              (!state.source || c.source === state.source),
+          );
+        const container = clear("customer-table");
+        container.append(
+          table(
+            ["العميلة", "الموبايل", "المصدر", "الحالة", "الموظفة", "الفستان"],
+            rows
+              .slice(state.page * 50, state.page * 50 + 50)
+              .map((c) => [
+                button(c.name, () => openProfile(c.id), "link"),
+                c.phone,
+                c.source,
+                c.status,
+                c.staff,
+                c.dress,
+              ]),
+          ),
+        );
+        const pager = el("div", undefined, "pager"),
+          prev = button("السابق", () => {
+            state.page--;
+            renderCustomersRows();
+          }),
+          next = button("التالي", () => {
+            state.page++;
+            renderCustomersRows();
+          });
+        prev.disabled = state.page === 0;
+        next.disabled = (state.page + 1) * 50 >= rows.length;
+        pager.append(
+          prev,
+          el(
+            "span",
+            count(rows.length) + " عميلة · صفحة " + count(state.page + 1),
+          ),
+          next,
+        );
+        container.append(pager);
+      }
+      function renderProfile(container) {
+        const c = customer(state.profile);
+        if (!c) {
+          state.profile = null;
+          render();
+          return;
+        }
+        container.append(
+          button(
+            "العودة",
+            () => {
+              state.profile = null;
+              render();
+            },
+            "link",
+          ),
+          heading(
+            c.name,
+            button("تعديل الملف", () => openForm("customer", c), "primary"),
+          ),
+        );
+        const grid = el("div", undefined, "grid"),
+          details = panel("ملف العميلة"),
+          history = panel("رحلة العميلة");
+        [
+          ["id", "Customer ID"],
+          ["phone", "الموبايل"],
+          ["wedding", "تاريخ الفرح (أصلي)"],
+          ["city", "مكان السكن"],
+          ["source", "المصدر"],
+          ["status", "حالة الاستفسار"],
+          ["service", "الخدمة"],
+          ["model", "الموديل"],
+          ["dress", "كود الفستان"],
+          ["staff", "الموظفة"],
+          ["createdAt", "تاريخ الإضافة"],
+          ["updatedAt", "آخر تعديل"],
+          ["notes", "الملاحظات"],
+        ].forEach(([key, label]) => {
+          const n = el("div", undefined, "detail");
+          n.append(el("span", label), el("span", c[key] || "—", "pre"));
+          details.append(n);
+        });
+        const appts = state.data.appointments.filter(
+            (a) => a.customerId === c.id,
+          ),
+          tasks = state.data.tasks.filter((t) => t.customerId === c.id);
+        appts.forEach((a) =>
+          history.append(
+            row(
+              a.type,
+              a.date + " " + a.time + " · " + a.status,
+              button("تعديل", () => openForm("appointment", a), "link"),
+            ),
+          ),
+        );
+        tasks.forEach((t) =>
+          history.append(row(t.title, t.due + " · " + t.status)),
+        );
+        history.append(
+          button("حجز موعد", () => openForm("appointment"), "link"),
+          button("إضافة متابعة", () => openForm("task"), "link"),
+          el("h2", "سجل النشاط", "spacer"),
+        );
+        const ids = new Set([
+          c.id,
+          ...appts.map((a) => a.id),
+          ...tasks.map((t) => t.id),
+        ]);
+        const logs = state.data.activity.filter((a) => ids.has(a.id));
+        logs.forEach((a) =>
+          history.append(row(a.action, a.at + " · " + a.actor)),
+        );
+        if (!logs.length)
+          empty(history, "لا يوجد نشاط مسجّل لهذا الملف في السجل المتاح.");
+        grid.append(details, history);
+        container.append(grid);
+      }
+      function field(name, label, type, value, required, options) {
+        const wrap = el("label", label),
+          input = options
+            ? el("select")
+            : el(type === "textarea" ? "textarea" : "input");
+        if (!options && type !== "textarea") input.type = type || "text";
+        if (options) {
+          input.append(new Option("اختاري…", ""));
+          const values = [...new Set(options.concat(value ? [value] : []))];
+          values.forEach((v) => input.append(new Option(v, v)));
+        }
+        input.name = name;
+        input.setAttribute("aria-label", label);
+        input.value = value || "";
+        input.required = !!required;
+        if (name === "notes") {
+          wrap.classList.add("full");
+          input.maxLength = 4000;
+        }
+        if (name === "name") input.maxLength = 120;
+        wrap.append(input);
+        $("formgrid").append(wrap);
+        return input;
+      }
+      function openForm(kind, record) {
+        if (state.busy) return;
+        const d = state.data;
+        state.form = {
+          kind: kind,
+          record: record || null,
+          requestId: crypto.randomUUID(),
+        };
+        state.pending = null;
+        clear("formgrid");
+        $("fields").disabled = false;
+        $("retry").classList.add("hidden");
+        $("duplicate-confirm").classList.add("hidden");
+        $("form").reset();
+        show("form-error", "");
+        const lists = d.config.lists,
+          values = d.config.values;
+        $("dialog-title").textContent =
+          kind === "customer"
+            ? record
+              ? "تعديل عميلة"
+              : "إضافة عميلة"
+            : kind === "appointment"
+              ? record
+                ? "تعديل موعد"
+                : "حجز موعد"
+              : "إضافة متابعة";
+        if (kind === "customer") {
+          [
+            ["name", "اسم العميلة", "text", true],
+            ["phone", "الموبايل", "tel"],
+            ["wedding", "تاريخ الفرح (أصلي)", "text"],
+            ["city", "مكان السكن", "text"],
+            ["dress", "كود الفستان", "text"],
+          ].forEach(([name, label, type, required]) =>
+            field(name, label, type, record && record[name], required),
+          );
+          [
+            ["source", "المصدر"],
+            ["status", "حالة العميلة"],
+            ["service", "الخدمة"],
+            ["model", "الموديل"],
+            ["staff", "الموظفة"],
+          ].forEach(([name, label]) =>
+            field(
+              name,
+              label,
+              "text",
+              record
+                ? record[name]
+                : name === "status"
+                  ? values.customerNew
+                  : "",
+              name === "status",
+              lists[name].length ? lists[name] : null,
+            ),
+          );
+          field("notes", "الملاحظات", "textarea", record && record.notes);
+        } else {
+          const select = field("customerId", "العميلة", "text", "", true, []);
+          d.customers
+            .filter((c) => c.id)
+            .forEach((c) =>
+              select.append(new Option(c.name + " · " + c.id, c.id)),
+            );
+          select.value = (record && record.customerId) || state.profile || "";
+          if (kind === "appointment") {
+            field(
+              "date",
+              "التاريخ",
+              "date",
+              (record && record.date) || d.today,
+              true,
+            );
+            field(
+              "time",
+              "الوقت · القاهرة",
+              "time",
+              (record && record.time) || "",
+              true,
+            );
+            field(
+              "type",
+              "نوع الموعد",
+              "text",
+              (record && record.type) || values.appointmentDefaultType,
+              true,
+              lists.appointmentType,
+            );
+            field(
+              "status",
+              "الحالة",
+              "text",
+              (record && record.status) || values.appointmentConfirmed,
+              true,
+              lists.appointmentStatus,
+            );
+            field("notes", "الملاحظات", "textarea", record && record.notes);
+          } else {
+            field("title", "المهمة", "text", "", true);
+            field("due", "تاريخ الاستحقاق", "date", d.today, true);
+          }
+          field(
+            "staff",
+            "الموظفة",
+            "text",
+            (record && record.staff) || "",
+            true,
+            lists.staff.length ? lists.staff : null,
+          );
+          if (!lists.staff.length)
+            $("formgrid").append(
+              el(
+                "small",
+                "قائمة الموظفات غير مهيأة؛ أدخلي اسمًا حقيقيًا أو اضبطي القائمة من الشيت.",
+                "full",
+              ),
+            );
+        }
+        $("dialog").showModal();
+        setTimeout(
+          () => $("formgrid").querySelector("input,select,textarea")?.focus(),
+          0,
+        );
+      }
+      function closeDialog() {
+        if (state.busy) return;
+        $("dialog").close();
+        state.form = null;
+      }
+      async function submitPayload(fn, payload) {
+        state.busy = true;
+        $("save").disabled = true;
+        $("close-dialog").disabled = true;
+        $("cancel").disabled = true;
+        show("form-error", "");
+        state.pending = { fn: fn, payload: payload };
+        try {
+          const result = await request(fn, payload);
+          state.pending = null;
+          show("message", result.warning || "تم الحفظ في Google Sheet.");
+          await reload();
+          $("dialog").close();
+        } catch (e) {
+          show("form-error", e.message);
+          if (e.message.includes("RB_DUPLICATE"))
+            $("duplicate-confirm").classList.remove("hidden");
+          if (e.message.includes("RB_PENDING")) {
+            $("fields").disabled = true;
+            $("retry").classList.remove("hidden");
+            $("save").classList.add("hidden");
+          }
+        } finally {
+          state.busy = false;
+          $("save").disabled = false;
+          $("close-dialog").disabled = false;
+          $("cancel").disabled = false;
+        }
+      }
+      $("form").onsubmit = (e) => {
+        e.preventDefault();
+        if (state.busy) return;
+        const f = state.form,
+          payload = Object.fromEntries(new FormData(e.currentTarget));
+        payload.confirmSeparateCustomer =
+          payload.confirmSeparateCustomer === "on";
+        payload.requestId = f.requestId;
+        if (f.record) payload.id = f.record.id;
+        const fn =
+          f.kind === "customer"
+            ? f.record
+              ? "RB_updateCustomer"
+              : "RB_addCustomer"
+            : f.kind === "appointment"
+              ? f.record
+                ? "RB_updateAppointment"
+                : "RB_addAppointment"
+              : "RB_addFollowup";
+        submitPayload(fn, payload);
+      };
+      $("retry").onclick = () => {
+        if (state.pending)
+          submitPayload(state.pending.fn, state.pending.payload);
+      };
+      async function completeTask(t) {
+        if (state.busy) return;
+        state.busy = true;
+        try {
+          await request("RB_completeTask", {
+            id: t.id,
+            requestId: crypto.randomUUID(),
+          });
+          show("message", "تم إكمال المتابعة مع الاحتفاظ بسجلها.");
+          await reload();
+        } catch (e) {
+          show("error", e.message);
+        } finally {
+          state.busy = false;
+        }
+      }
+      $("close-dialog").onclick = closeDialog;
+      $("cancel").onclick = closeDialog;
+      $("dialog").addEventListener("cancel", (e) => {
+        if (state.busy) e.preventDefault();
+      });
+      $("dialog").addEventListener("close", () => {
+        $("save").classList.remove("hidden");
+      });
+      $("reload").onclick = reload;
+      document.querySelectorAll("[data-view]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            state.view = b.dataset.view;
+            state.profile = null;
+            show("error", "");
+            render();
+          }),
+      );
+      reload();
+    </script>
+  </body>
+</html>

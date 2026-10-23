@@ -1,5 +1,7 @@
 # ROJBEY CRM
 
+**نطاق العمل الحالي: [Phase 01 — Google Sheets + Apps Script](phase01/README.md).** الحزمة في `phase01/` منفصلة عن عرض Next.js أدناه. التشغيل الحي على Google لم يُتحقق بعد؛ راجعي [التدقيق والحالة](phase01/docs/TEST_REPORT.md).
+
 نسخة MVP مخصصة لفريق أتيليه Rojbey، باستخدام Next.js وTypeScript وواجهة عربية RTL. الهوية مأخوذة من ملفات Rojbey المرفقة: Pearl / Night / Gold، وخطّا IBM Plex Sans Arabic وCormorant Garamond محفوظان ضمن التطبيق دون طلبات Google Fonts خارجية. حرف R داخل الماسة علامة مؤقتة، وليس الشعار الأصلي.
 
 ## التشغيل المحلي
