@@ -1,4 +1,9 @@
-import { createHash, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  scryptSync,
+  pbkdf2Sync,
+  timingSafeEqual,
+} from "node:crypto";
 import type { Role, Session } from "./domain.ts";
 type Account = { id: string; name: string; role: Role; passwordHash: string };
 function accounts(): Account[] {
@@ -14,7 +19,13 @@ function accounts(): Account[] {
       typeof r.name !== "string" ||
       !r.name.trim() ||
       !["admin", "staff"].includes(r.role) ||
-      !/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(r.passwordHash)
+      !(
+        typeof r.passwordHash === "string" &&
+        (/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(r.passwordHash) ||
+          /^pbkdf2-sha256:600000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(
+            r.passwordHash,
+          ))
+      )
     )
       throw Error("إعداد الحسابات غير صالح");
     ids.add(r.id);
@@ -30,12 +41,17 @@ export function authenticateAccount(id: unknown, password: unknown) {
   const rows = accounts();
   const account = rows.find((r) => r.id === id);
   if (typeof password !== "string" || password.length > 1024) return null;
+  const stored = account?.passwordHash;
   const [, salt, hash] = (
     account?.passwordHash || `scrypt:${"0".repeat(32)}:${"0".repeat(128)}`
   ).split(":");
-  const actual = scryptSync(password, salt, 64);
-  if (!timingSafeEqual(actual, Buffer.from(hash, "hex")) || !account)
-    return null;
+  const parts = stored?.split(":");
+  const pbkdf2 = parts?.[0] === "pbkdf2-sha256";
+  const actual = pbkdf2
+    ? pbkdf2Sync(password, Buffer.from(parts[2], "hex"), 600_000, 32, "sha256")
+    : scryptSync(password, salt, 64);
+  const expected = Buffer.from(pbkdf2 ? parts[3] : hash, "hex");
+  if (!timingSafeEqual(actual, expected) || !account) return null;
   return {
     id: account.id,
     name: account.name,

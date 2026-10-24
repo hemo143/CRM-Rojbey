@@ -1,6 +1,6 @@
 // Real production Next server, synthetic accounts, no outbound Google requests.
 import { spawn } from "node:child_process";
-import { randomBytes, scryptSync } from "node:crypto";
+import { randomBytes, scryptSync, pbkdf2Sync } from "node:crypto";
 import assert from "node:assert/strict";
 const origin = "http://127.0.0.1:3201";
 const password = randomBytes(24).toString("hex");
@@ -10,7 +10,10 @@ const accounts = ["admin", "staff"].map((role) => {
     id: role,
     role,
     name: `Synthetic ${role}`,
-    passwordHash: `scrypt:${salt}:${scryptSync(password, salt, 64).toString("hex")}`,
+    passwordHash:
+      role === "staff"
+        ? `pbkdf2-sha256:600000:${salt}:${pbkdf2Sync(password, Buffer.from(salt, "hex"), 600000, 32, "sha256").toString("hex")}`
+        : `scrypt:${salt}:${scryptSync(password, salt, 64).toString("hex")}`,
   };
 });
 const server = spawn(
@@ -62,6 +65,11 @@ try {
   }
   assert.ok(ready, "server startup");
   assert.equal((await request("/api/crm")).status, 401);
+  const setup = await request("/setup-account");
+  assert.ok(
+    !(await setup.text()).includes('name="username"'),
+    "setup form hidden outside demo mode",
+  );
   assert.equal(
     (await request("/api/auth", { demo: true, role: "admin" })).status,
     401,

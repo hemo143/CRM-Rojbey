@@ -236,3 +236,55 @@ test("Sheets UI preserves imported vocabulary and retries an uncertain save with
     page.getByText("ملاحظة اختبار الربط", { exact: true }),
   ).toBeVisible();
 });
+
+test("account setup derives configuration in-browser without sending the password or registering an account", async ({
+  page,
+}) => {
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST") writes.push(r.url());
+  });
+  await page.goto("/setup-account");
+  await page
+    .getByLabel("كلمة المرور", { exact: true })
+    .fill("synthetic-browser-password");
+  await page
+    .getByLabel("تأكيد كلمة المرور", { exact: true })
+    .fill("synthetic-browser-password");
+  await page.getByRole("button", { name: "تجهيز إعداد الحساب" }).click();
+  const output = page.getByLabel("إعداد CRM_USERS_JSON");
+  await expect(output).toBeVisible();
+  const account = JSON.parse(await output.inputValue())[0];
+  expect(account.role).toBe("admin");
+  expect(account.passwordHash).toMatch(
+    /^pbkdf2-sha256:600000:[a-f0-9]{32}:[a-f0-9]{64}$/,
+  );
+  expect(await output.inputValue()).not.toContain("synthetic-browser-password");
+  await expect(page.getByLabel("كلمة المرور", { exact: true })).toHaveValue("");
+  expect(writes).toEqual([]);
+});
+
+test("account setup cannot submit a password when JavaScript is disabled", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    javaScriptEnabled: false,
+    baseURL,
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/setup-account");
+    await expect(
+      page.getByLabel("كلمة المرور", { exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "تجهيز إعداد الحساب" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByText("يلزم تفعيل JavaScript لتجهيز الحساب داخل المتصفح."),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
