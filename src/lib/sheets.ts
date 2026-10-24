@@ -119,6 +119,10 @@ export function mapSheetData(raw: NativeData): Data {
       "يلزم مراجعة معرّفات العميلات في الشيت قبل عرض ملفات قابلة للتعديل",
     );
   const values = raw.config.values;
+  const customerIds = new Set(raw.customers.map((c) => c.id));
+  const entityCustomers = new Map(
+    [...raw.appointments, ...raw.tasks].map((row) => [row.id, row.customerId]),
+  );
   return {
     customers: raw.customers.map((r) => ({
       ...r,
@@ -161,7 +165,9 @@ export function mapSheetData(raw: NativeData): Data {
     })),
     activity: raw.activity.map((r, i) => ({
       id: `sheet-log-${i}`,
-      customerId: r.id,
+      customerId: customerIds.has(r.id)
+        ? r.id
+        : entityCustomers.get(r.id) || "",
       at: r.at,
       actor: r.actor,
       text: r.action,
@@ -189,6 +195,9 @@ export function sheetOperation(p: Record<string, unknown>) {
         "name",
         "phone",
         "source",
+        "wedding",
+        "city",
+        "dress",
         "channel",
         "username",
         "metaContactId",

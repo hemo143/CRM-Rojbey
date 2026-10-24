@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, type FormEvent } from "react";
+import Brand from "../brand";
 import { deriveAccount } from "@/lib/account-setup";
 export default function AccountSetup() {
   const [ready, setReady] = useState(false);
@@ -34,9 +35,11 @@ export default function AccountSetup() {
   }
   return (
     <main style={{ maxWidth: 600, margin: "8vh auto", padding: 24 }}>
-      <p className="eyebrow" style={{ textAlign: "center" }}>
-        ROJBEY
-      </p>
+      <div
+        style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}
+      >
+        <Brand />
+      </div>
       <section className="panel">
         <h1>إعداد حساب الإدارة</h1>
         <p>

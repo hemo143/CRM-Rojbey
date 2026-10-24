@@ -211,6 +211,12 @@ test("Sheets UI preserves imported vocabulary and retries an uncertain save with
   await page
     .getByRole("button", { name: "عميلة اختبار الشيت", exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "+ موعد", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "إضافة متابعة", exact: true }),
+  ).toBeDisabled();
   await page.getByRole("button", { name: "تعديل الملف" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.locator('select[name="status"]')).toHaveValue("مستورد");
@@ -287,4 +293,69 @@ test("account setup cannot submit a password when JavaScript is disabled", async
   } finally {
     await context.close();
   }
+});
+
+test("customer directory keeps all 1465 synthetic records searchable without truncation", async ({
+  page,
+}) => {
+  const customers = Array.from({ length: 1465 }, (_, i) => ({
+    id: `synthetic-scale-${i + 1}`,
+    name: `عميلة اختبار ${i + 1}`,
+    phone: `010${String(i + 1).padStart(8, "0")}`,
+    channel: "",
+    source: "",
+    username: "",
+    metaContactId: "",
+    lastMessage: "",
+    lastMessageAt: "",
+    notes: "",
+    status: "مستورد",
+    staff: "",
+    service: "",
+    model: "",
+    createdAt: "",
+  }));
+  await page.route("**/api/auth", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: "scale-admin",
+          role: "admin",
+          name: "Synthetic scale admin",
+          demo: false,
+          exp: Date.now() + 100000,
+        },
+        demo: false,
+        namedAccounts: true,
+      },
+    }),
+  );
+  await page.route("**/api/crm", (route) =>
+    route.fulfill({
+      json: {
+        customers,
+        appointments: [],
+        followups: [],
+        activity: [],
+        sheet: {
+          lists: { status: ["جديدة"], channel: [], staff: [], source: [] },
+          values: { customerNew: "جديدة" },
+          warnings: {},
+        },
+      },
+    }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "العميلات", exact: false })
+    .click();
+  await expect(page.locator("tbody tr")).toHaveCount(1465);
+  await page
+    .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
+    .fill("synthetic-scale-1465");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(
+    page.getByRole("table").getByText("عميلة اختبار 1465", { exact: true }),
+  ).toBeVisible();
 });

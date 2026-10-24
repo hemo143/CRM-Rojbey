@@ -9,6 +9,13 @@ import {
   type Appointment,
   type Session,
 } from "@/lib/domain";
+import {
+  dateLabel,
+  timestampLabel,
+  customerMatchesSearch,
+  recentCustomers,
+} from "@/lib/workflow";
+import Brand from "./brand";
 type View =
   | "dashboard"
   | "customers"
@@ -28,24 +35,6 @@ const navigation: [View, string, string][] = [
 ];
 const demoStaffNames = ["فريق الأتيليه", "مديرة الأتيليه"];
 const number = (n: number) => new Intl.NumberFormat("ar-EG").format(n);
-const dateLabel = (date: string) =>
-  date
-    ? new Intl.DateTimeFormat("ar-EG", {
-        dateStyle: "medium",
-        timeZone: "Africa/Cairo",
-      }).format(new Date(date + "T12:00:00+02:00"))
-    : "—";
-function Mark() {
-  return (
-    <div className="brand">
-      <span className="diamond">R</span>
-      <div>
-        <span className="wordmark">ROJBEY</span>
-        <small>مساحة الأتيليه</small>
-      </div>
-    </div>
-  );
-}
 export default function Home() {
   const [user, setUser] = useState<Session | null>(null),
     [demo, setDemo] = useState(false),
@@ -56,6 +45,8 @@ export default function Home() {
     [search, setSearch] = useState(""),
     [status, setStatus] = useState(""),
     [channel, setChannel] = useState(""),
+    [source, setSource] = useState(""),
+    [staffFilter, setStaffFilter] = useState(""),
     [profile, setProfile] = useState<string | null>(null),
     [modal, setModal] = useState<
       "customer" | "appointment" | "followup" | null
@@ -71,6 +62,16 @@ export default function Home() {
   const statuses = live ? lists?.status || [] : [...demoStatuses];
   const channels = live ? lists?.channel || [] : [...demoChannels];
   const newStatus = data?.sheet?.values.customerNew || "جديدة";
+  const assignmentDeferred = live && !staffNames.length;
+  useEffect(() => {
+    if (!pending) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
   async function load() {
     const res = await fetch("/api/crm");
     const body = await res.json();
@@ -128,6 +129,10 @@ export default function Home() {
     };
   }, [modal, busy]);
   async function logout() {
+    if (pending) {
+      setError("احسمي الطلب السابق بإعادة المحاولة قبل تسجيل الخروج.");
+      return;
+    }
     try {
       const response = await fetch("/api/auth", { method: "DELETE" });
       if (!response.ok) throw Error("تعذّر تسجيل الخروج");
@@ -252,12 +257,11 @@ export default function Home() {
       data?.customers.filter(
         (c) =>
           (view !== "leads" || c.status === newStatus) &&
-          (!search ||
-            [c.name, c.phone, c.username].some((v) =>
-              v.toLowerCase().includes(search.toLowerCase()),
-            )) &&
+          customerMatchesSearch(c, search) &&
           (!status || c.status === status) &&
-          (!channel || c.channel === channel),
+          (!channel || c.channel === channel) &&
+          (!source || c.source === source) &&
+          (!staffFilter || c.staff === staffFilter),
       ) || [];
   if (loading)
     return <main className="loading">جارٍ تجهيز مساحة الأتيليه…</main>;
@@ -265,7 +269,7 @@ export default function Home() {
     return (
       <main className="login">
         <section className="login-story">
-          <Mark />
+          <Brand />
           <div>
             <p className="eyebrow">THE ATELIER · CAIRO</p>
             <h1>
@@ -341,7 +345,7 @@ export default function Home() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Mark />
+        <Brand />
         <p className="nav-label">إدارة الأتيليه</p>
         <nav>
           {navigation
@@ -396,6 +400,24 @@ export default function Home() {
               / {navigation.find((n) => n[0] === view)?.[1]}
             </span>
           </span>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await load();
+                setNotice("تم تحديث البيانات.");
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            تحديث البيانات
+          </button>
           <span className="today">
             {new Intl.DateTimeFormat("ar-EG", {
               dateStyle: "full",
@@ -466,6 +488,27 @@ export default function Home() {
                     {[
                       ["الموبايل", selected.phone],
                       ["قناة التواصل", selected.channel],
+                      ...(live
+                        ? [
+                            ["مصدر العميلة", selected.source],
+                            ["تاريخ الفرح (أصلي)", selected.wedding],
+                            ["مكان السكن", selected.city],
+                            ["كود الفستان", selected.dress],
+                            ["Customer ID", selected.id],
+                            [
+                              "تاريخ الإضافة",
+                              selected.createdAt
+                                ? timestampLabel(selected.createdAt)
+                                : "",
+                            ],
+                            [
+                              "آخر تعديل",
+                              selected.updatedAt
+                                ? timestampLabel(selected.updatedAt)
+                                : "",
+                            ],
+                          ]
+                        : []),
                       ["اسم المستخدم", selected.username],
                       ["Meta Contact ID", selected.metaContactId],
                       ["حالة الاستفسار", selected.status],
@@ -492,6 +535,7 @@ export default function Home() {
                     <button
                       className="text-button"
                       onClick={() => open("appointment")}
+                      disabled={assignmentDeferred}
                     >
                       + موعد
                     </button>
@@ -526,7 +570,11 @@ export default function Home() {
                         </span>
                       </div>
                     ))}
-                  <button className="outline" onClick={() => open("followup")}>
+                  <button
+                    className="outline"
+                    disabled={assignmentDeferred}
+                    onClick={() => open("followup")}
+                  >
                     إضافة متابعة
                   </button>
                   <h3>سجل النشاط</h3>
@@ -536,10 +584,7 @@ export default function Home() {
                       <div key={a.id} className="activity">
                         <span>{a.text}</span>
                         <small>
-                          {a.actor} ·{" "}
-                          {new Date(a.at).toLocaleString("ar-EG", {
-                            timeZone: "Africa/Cairo",
-                          })}
+                          {a.actor} · {timestampLabel(a.at)}
                         </small>
                       </div>
                     ))}
@@ -574,6 +619,10 @@ export default function Home() {
                 {!["messages", "staff"].includes(view) && (
                   <button
                     className="primary"
+                    disabled={
+                      assignmentDeferred &&
+                      (view === "appointments" || view === "followups")
+                    }
                     onClick={() =>
                       open(
                         view === "appointments"
@@ -721,7 +770,7 @@ export default function Home() {
                       </button>
                     </div>
                     <CustomerTable
-                      customers={data?.customers.slice(0, 5) || []}
+                      customers={recentCustomers(data?.customers || [])}
                       onSelect={setProfile}
                     />
                   </section>
@@ -768,6 +817,50 @@ export default function Home() {
                         <option key={c}>{c}</option>
                       ))}
                     </select>
+                    {live && (
+                      <select
+                        aria-label="فلترة المصدر"
+                        value={source}
+                        onChange={(e) => setSource(e.target.value)}
+                      >
+                        <option value="">كل المصادر</option>
+                        {[
+                          ...new Set([
+                            ...(lists?.source || []),
+                            ...(data?.customers.map((c) => c.source || "") ||
+                              []),
+                          ]),
+                        ]
+                          .filter(Boolean)
+                          .map((v) => (
+                            <option key={v}>{v}</option>
+                          ))}
+                      </select>
+                    )}
+                    <select
+                      aria-label="فلترة الموظفة"
+                      value={staffFilter}
+                      onChange={(e) => setStaffFilter(e.target.value)}
+                    >
+                      <option value="">كل الموظفات</option>
+                      {[...new Set((data?.customers || []).map((c) => c.staff))]
+                        .filter(Boolean)
+                        .map((v) => (
+                          <option key={v}>{v}</option>
+                        ))}
+                    </select>
+                    <button
+                      className="text-button"
+                      onClick={() => {
+                        setSearch("");
+                        setStatus("");
+                        setChannel("");
+                        setSource("");
+                        setStaffFilter("");
+                      }}
+                    >
+                      مسح الفلاتر
+                    </button>
                     <small>{number(filtered.length)} عميلة</small>
                   </div>
                   <CustomerTable customers={filtered} onSelect={setProfile} />
@@ -935,7 +1028,9 @@ export default function Home() {
                   <h2>أدوار الفريق</h2>
                   <p className="muted">
                     {live
-                      ? "حسابات دخول فردية تُدار من إعدادات الخادم. قائمة إسناد الموظفات في الشيت مستقلة وما زالت مؤجّلة."
+                      ? assignmentDeferred
+                        ? "حسابات دخول فردية تُدار من إعدادات الخادم. اعتماد قائمة الموظفات المسؤولة عن الإسناد مؤجّل."
+                        : "حسابات دخول فردية تُدار من إعدادات الخادم، ومستقلة عن قائمة الموظفات المسؤولة عن الإسناد في الشيت."
                       : "حسابان للتجربة ببيانات وهمية."}
                   </p>
                   <div className="table-wrap">
@@ -955,8 +1050,8 @@ export default function Home() {
                           ["عرض إعدادات الصلاحيات", "متاح", "غير متاح"],
                         ].map((row) => (
                           <tr key={row[0]}>
-                            {row.map((cell) => (
-                              <td key={cell}>{cell}</td>
+                            {row.map((cell, index) => (
+                              <td key={index}>{cell}</td>
                             ))}
                           </tr>
                         ))}
@@ -1053,6 +1148,34 @@ export default function Home() {
                         />
                       </label>
                     ))}
+                    {live && (
+                      <>
+                        <Select
+                          name="source"
+                          label="مصدر العميلة"
+                          values={lists?.source || []}
+                          value={(editing as Customer)?.source ?? ""}
+                        />
+                        {[
+                          ["wedding", "تاريخ الفرح (أصلي)"],
+                          ["city", "مكان السكن"],
+                          ["dress", "كود الفستان"],
+                        ].map(([name, label]) => (
+                          <label key={name}>
+                            {label}
+                            <input
+                              name={name}
+                              maxLength={200}
+                              defaultValue={
+                                (editing as Customer)?.[
+                                  name as "wedding" | "city" | "dress"
+                                ] || ""
+                              }
+                            />
+                          </label>
+                        ))}
+                      </>
+                    )}
                     <Select
                       name="staff"
                       label="الموظفة"
@@ -1065,7 +1188,10 @@ export default function Home() {
                       name="channel"
                       label="قناة التواصل"
                       values={[...channels]}
-                      value={(editing as Customer)?.channel}
+                      value={
+                        (editing as Customer)?.channel ??
+                        (live ? "" : undefined)
+                      }
                     />
                     <Select
                       name="status"
@@ -1081,7 +1207,10 @@ export default function Home() {
                           ? lists?.service || []
                           : ["إيجار", "شراء", "لم تحدد"]
                       }
-                      value={(editing as Customer)?.service}
+                      value={
+                        (editing as Customer)?.service ??
+                        (live ? "" : undefined)
+                      }
                     />
                     <Select
                       name="model"
@@ -1097,7 +1226,9 @@ export default function Home() {
                               "لم تحدد",
                             ]
                       }
-                      value={(editing as Customer)?.model}
+                      value={
+                        (editing as Customer)?.model ?? (live ? "" : undefined)
+                      }
                     />
                     <label>
                       تاريخ آخر رسالة
@@ -1130,6 +1261,7 @@ export default function Home() {
                       العميلة
                       <select
                         name="customerId"
+                        aria-label="العميلة"
                         required
                         defaultValue={
                           (editing as Appointment)?.customerId || profile || ""
@@ -1215,6 +1347,7 @@ export default function Home() {
                         <Select
                           name="staff"
                           label="الموظفة"
+                          required
                           values={staffNames}
                           value={
                             (editing as Appointment)?.staff ??
@@ -1253,6 +1386,7 @@ export default function Home() {
                         <Select
                           name="staff"
                           label="الموظفة"
+                          required
                           values={staffNames}
                           value={live ? "" : user.name}
                         />
@@ -1289,16 +1423,23 @@ function Select({
   label,
   values,
   value,
+  required,
 }: {
   name: string;
   label: string;
   values: string[];
   value?: string;
+  required?: boolean;
 }) {
   return (
     <label>
       {label}
-      <select name={name} defaultValue={value ?? values[0] ?? ""}>
+      <select
+        name={name}
+        aria-label={label}
+        required={required}
+        defaultValue={value ?? values[0] ?? ""}
+      >
         {(value !== undefined && !values.includes(value)
           ? [value, ...values]
           : values.length

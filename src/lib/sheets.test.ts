@@ -272,3 +272,55 @@ test("signed appointment and follow-up workflow uses native sheet IDs, cancellat
   assert.equal(data.appointments[0].status, "ملغي");
   assert.equal(data.followups[0].done, true);
 });
+
+test("appointment and task activity is linked to the customer profile rather than the entity ID", () => {
+  const { call, db } = fixture();
+  db.active
+    .getSheetByName("القوائم والإعدادات")
+    .getRange(2, 11)
+    .setValue("Synthetic approved staff");
+  const customerId = "SYNTHETIC-LEGACY-ID";
+  call("appointment.add", {
+    customerId,
+    date: "2030-12-01",
+    time: "11:00",
+    staff: "Synthetic approved staff",
+    requestId: "profile-appointment-log-001",
+  });
+  const task = call("followup.add", {
+    customerId,
+    due: "2030-12-01",
+    staff: "Synthetic approved staff",
+    title: "Synthetic profile task",
+    requestId: "profile-task-log-001",
+  });
+  call("followup.complete", {
+    id: task.data.id,
+    requestId: "profile-task-done-001",
+  });
+  const data = mapSheetData(call("read").data);
+  const actions = data.activity
+    .filter((a) => a.customerId === customerId)
+    .map((a) => a.text);
+  assert.ok(actions.includes("حجز موعد"));
+  assert.ok(actions.includes("إضافة متابعة"));
+  assert.ok(actions.includes("إكمال متابعة"));
+});
+
+test("customer commands forward original wedding, source, residence and dress fields without defaults", () => {
+  const operation = sheetOperation({
+    action: "customer.update",
+    id: "original-customer-id",
+    requestId: "original-fields-001",
+    wedding: "أكتوبر بدون سنة",
+    source: "Instagram",
+    city: "Synthetic residence",
+    dress: "TEST-01",
+    createdAt: "fabricated",
+  });
+  assert.equal(operation.payload.wedding, "أكتوبر بدون سنة");
+  assert.equal(operation.payload.city, "Synthetic residence");
+  assert.equal(operation.payload.dress, "TEST-01");
+  assert.equal("createdAt" in operation.payload, false);
+  assert.equal("channel" in operation.payload, false);
+});

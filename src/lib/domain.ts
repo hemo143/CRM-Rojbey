@@ -19,6 +19,10 @@ export type Customer = {
   phone: string;
   channel: string;
   source?: string;
+  wedding?: string;
+  city?: string;
+  dress?: string;
+  updatedAt?: string;
   username: string;
   metaContactId: string;
   lastMessage: string;
