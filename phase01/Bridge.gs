@@ -30,7 +30,7 @@ function rbRenderEqual_(a, b) {
   return difference === 0;
 }
 function doPost(event) {
-  let result;
+  let result, request;
   try {
     const props = rbProps_();
     const secret = props.getProperty("RB_RENDER_SECRET");
@@ -39,7 +39,7 @@ function doPost(event) {
     if (!raw || raw.length > 100000) throw Error("RB_BRIDGE_AUTH");
     const envelope = JSON.parse(raw);
     if (typeof envelope.body !== "string" || !rbRenderEqual_(envelope.signature, rbRenderSignature_(envelope.body, secret))) throw Error("RB_BRIDGE_AUTH");
-    const request = JSON.parse(envelope.body);
+    request = JSON.parse(envelope.body);
     if (request.version !== 1 || !Number.isFinite(request.at) || Math.abs(Date.now() - request.at) > 120000 || !/^[a-zA-Z0-9_-]{16,100}$/.test(request.nonce || "")) throw Error("RB_BRIDGE_AUTH");
     const actor = request.actor;
     if (!actor || !["admin", "staff"].includes(actor.role) || typeof actor.id !== "string" || !/^[a-zA-Z0-9_.@-]{1,100}$/.test(actor.id) || !rbString_(actor.name, 120)) throw Error("RB_BRIDGE_AUTH");
@@ -53,6 +53,7 @@ function doPost(event) {
     });
     const methods = {
       read: RB_getData,
+      "request.status": RB_requestStatus,
       "customer.add": RB_addCustomer,
       "customer.update": RB_updateCustomer,
       "appointment.add": RB_addAppointment,
@@ -66,10 +67,25 @@ function doPost(event) {
     RB_RENDER_CONTEXT_ = { owner: owner, actor: "Render/" + actor.id + " (" + actor.role + ")" };
     result = { ok: true, data: methods[request.method](request.payload) };
   } catch (error) {
-    const message = String(error && error.message || "RB_BRIDGE_FAILED");
-    result = { ok: false, error: message };
+    let message = String(error && error.message || "RB_BRIDGE_FAILED");
+    let reconciled = null;
+    if (RB_RENDER_CONTEXT_ && request && request.method !== "read" && request.method !== "request.status" && message !== "Request ID مستخدم لعملية مختلفة") {
+      try {
+        const state = RB_requestStatus(request.payload);
+        if (state.state === "saved") reconciled = state;
+        else if (state.state === "pending") message = "RB_PENDING: يلزم حسم الطلب بنفس Request ID";
+      } catch (_) { message = "RB_PENDING: تعذّر التحقق من الطلب"; }
+    }
+    let existing = null;
+    if (message.startsWith("RB_DUPLICATE: ")) {
+      try { existing = JSON.parse(message.slice("RB_DUPLICATE: ".length)); } catch (_) {}
+    }
+    // Metadata only: never log payloads, names, phone numbers, signatures, or credentials.
+    if (typeof console !== "undefined") console.error(JSON.stringify({ event: "crm.bridge.failure", code: existing ? "duplicate" : message.startsWith("RB_PENDING:") ? "pending" : "rejected" }));
+    result = reconciled ? { ok: true, data: {ok:true,id:reconciled.id,reconciled:true} } : { ok: false, error: existing ? "RB_DUPLICATE: رقم الهاتف مسجل بالفعل" : message, existing: existing };
   } finally {
     RB_RENDER_CONTEXT_ = null;
   }
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
+

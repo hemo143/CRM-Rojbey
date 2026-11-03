@@ -49,6 +49,7 @@ test("admin completes native-sheet customer, lead, appointment, follow-up and ac
             json: {
               error: result.error,
               pending: result.error.startsWith("RB_PENDING:"),
+              existing: result.existing,
             },
           },
     );
@@ -108,6 +109,9 @@ test("admin completes native-sheet customer, lead, appointment, follow-up and ac
   await nav("العميلات");
   await page
     .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
+    .fill("عميلة رحلة الأدمن");
+  await page
+    .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
     .fill("01055512345");
   await page
     .getByRole("combobox", { name: "فلترة المصدر" })
@@ -163,11 +167,16 @@ test("admin completes native-sheet customer, lead, appointment, follow-up and ac
   expect(fixture.call("read").data.appointments[0].status).toBe("ملغي");
   await nav("العميلات");
   await page
+    .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
+    .fill("عميلة رحلة الأدمن");
+  await page
     .getByRole("button", { name: "عميلة رحلة الأدمن", exact: true })
     .click();
   await page.getByRole("button", { name: "إضافة متابعة", exact: true }).click();
   await modal.getByLabel("المهمة", { exact: true }).fill("متابعة رحلة الأدمن");
-  await modal.getByLabel("تاريخ المتابعة", { exact: true }).fill("2000-01-01");
+  await modal
+    .getByLabel("تاريخ المتابعة", { exact: true })
+    .fill("2000-01-01T12:00");
   await modal
     .getByLabel("الموظفة", { exact: true })
     .selectOption("فريق اختبار");
@@ -183,6 +192,9 @@ test("admin completes native-sheet customer, lead, appointment, follow-up and ac
   await page.reload();
   await nav("العميلات");
   await page
+    .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
+    .fill("عميلة رحلة الأدمن");
+  await page
     .getByRole("button", { name: "عميلة رحلة الأدمن", exact: true })
     .click();
   await expect(
@@ -190,7 +202,10 @@ test("admin completes native-sheet customer, lead, appointment, follow-up and ac
   ).toBeVisible();
   await expect(page.getByText("إكمال متابعة", { exact: true })).toBeVisible();
   await expect(page.getByText("تعديل موعد", { exact: true })).toBeVisible();
-  await nav("الاستفسارات"); // customer changed from new to interested, so no longer a new lead
+  await nav("الاستفسارات");
+  await page
+    .getByPlaceholder("ابحثي بالاسم، الموبايل أو اسم المستخدم…")
+    .fill(""); // customer changed from new to interested, so no longer a new lead
   await expect(
     page.getByRole("table").getByText("عميلة رحلة الأدمن", { exact: true }),
   ).toHaveCount(0);

@@ -62,6 +62,7 @@ const RB_SCHEMA = {
       id: "Customer ID",
       name: "الاسم",
       phone: "رقم الهاتف",
+      normalizedPhone: "Normalized Phone",
       wedding: "تاريخ الفرح (أصلي)",
       city: "مكان السكن",
       source: "مصدر العميلة",
@@ -110,6 +111,7 @@ const RB_SCHEMA = {
       customerId: "Customer ID",
       name: "اسم العميلة",
       title: "المهمة",
+      notes: "ملاحظات المتابعة",
       staff: "الموظفة",
       due: "تاريخ الاستحقاق",
       status: "الحالة",
@@ -444,11 +446,13 @@ function rbToday_() {
   return Utilities.formatDate(new Date(), RB.ZONE, "yyyy-MM-dd");
 }
 function rbPhone_(value) {
-  return rbString_(value, 100)
+  let phone = rbString_(value, 100)
     .replace(/[٠-٩]/g, (c) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
     .replace(/[۰-۹]/g, (c) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)))
-    .replace(/[\s().-]/g, "")
-    .replace(/^00/, "+");
+    .replace(/[\s().-]/g, "").replace(/^00/, "+");
+  if (/^01[0125]\d{8}$/.test(phone)) phone = "+20" + phone.slice(1);
+  if (/^201[0125]\d{8}$/.test(phone)) phone = "+" + phone;
+  return phone;
 }
 function rbChoice_(config, key, value, old) {
   if (
@@ -544,3 +548,4 @@ function rbTaskOpen_(task, config) {
       task.status !== config.values.taskCancelled)
   );
 }
+

@@ -171,7 +171,7 @@ test("browser workflow uses .gs backend: customer, profile edit, appointment/can
     await page.close();
   }
 });
-test("browser retries pending primary-write failure with same request ID and creates one record", async () => {
+test("browser reconciles committed primary-write audit failure and creates one record", async () => {
   const f = backend(),
     page = await pageFor(f);
   try {
@@ -186,10 +186,6 @@ test("browser retries pending primary-write failure with same request ID and cre
       .getByLabel("اسم العميلة", { exact: true })
       .fill("Synthetic recovery customer");
     await dialog.getByRole("button", { name: "حفظ في Google Sheet" }).click();
-    await dialog.getByText(/RB_PENDING/).waitFor();
-    await dialog
-      .getByRole("button", { name: "إعادة نفس الطلب المعلّق" })
-      .click();
     await dialog.waitFor({ state: "hidden" });
     assert.equal(f.context.RB_getData().customers.length, 1);
     assert.equal(
@@ -214,3 +210,4 @@ test("without Apps Script connection interface fails explicitly and does not sho
     await page.close();
   }
 });
+

@@ -17,10 +17,11 @@ try{
  await start();assert.equal((await (await fetch(origin+'/api/auth')).json()).demo,false);
  assert.equal((await post('/api/auth',{demo:true,role:'admin'})).status,401);
  assert.equal((await post('/api/auth',{role:'admin',password:'incorrect-test-password'})).status,401);
- const cookie=await login('admin',admin);const added=await post('/api/crm',{action:'customer.add',name:'Production smoke test'},cookie);assert.equal(added.status,200);const {id}=await added.json();
+ const cookie=await login('admin',admin);const added=await post('/api/crm',{action:'customer.add',requestId:'production-smoke-contact',name:'Production smoke test'},cookie);assert.equal(added.status,200);const {id}=await added.json();
  const staffCookie=await login('staff',staff);assert.equal((await post('/api/crm',{action:'customer.update',id,name:'Denied'},staffCookie)).status,403);
  const tampered=cookie.slice(0,-1)+(cookie.endsWith('a')?'b':'a');assert.equal((await fetch(origin+'/api/crm',{headers:{Cookie:tampered}})).status,401);
  await stop();await start();const persisted=await (await fetch(origin+'/api/crm',{headers:{Cookie:cookie}})).json();assert.ok(persisted.customers.some(c=>c.id===id));
  assert.equal((await fetch(origin+'/api/auth',{method:'DELETE',headers:{Origin:origin,Cookie:cookie}})).status,200);
  console.log('PASS: production build startup, password login, demo bypass rejection, secure cookie, staff permissions, tamper rejection, data and session persistence after restart, logout.');
 }catch(e){console.error(e.message);console.error(logs);process.exitCode=1;}finally{await stop();await rm(dir,{recursive:true,force:true});}
+

@@ -67,6 +67,7 @@ const RB_SCHEMA = {
       id: "Customer ID",
       name: "الاسم",
       phone: "رقم الهاتف",
+      normalizedPhone: "Normalized Phone",
       wedding: "تاريخ الفرح (أصلي)",
       city: "مكان السكن",
       source: "مصدر العميلة",
@@ -115,6 +116,7 @@ const RB_SCHEMA = {
       customerId: "Customer ID",
       name: "اسم العميلة",
       title: "المهمة",
+      notes: "ملاحظات المتابعة",
       staff: "الموظفة",
       due: "تاريخ الاستحقاق",
       status: "الحالة",
@@ -449,11 +451,13 @@ function rbToday_() {
   return Utilities.formatDate(new Date(), RB.ZONE, "yyyy-MM-dd");
 }
 function rbPhone_(value) {
-  return rbString_(value, 100)
+  let phone = rbString_(value, 100)
     .replace(/[٠-٩]/g, (c) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
     .replace(/[۰-۹]/g, (c) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)))
-    .replace(/[\s().-]/g, "")
-    .replace(/^00/, "+");
+    .replace(/[\s().-]/g, "").replace(/^00/, "+");
+  if (/^01[0125]\d{8}$/.test(phone)) phone = "+20" + phone.slice(1);
+  if (/^201[0125]\d{8}$/.test(phone)) phone = "+" + phone;
+  return phone;
 }
 function rbChoice_(config, key, value, old) {
   if (
@@ -551,6 +555,7 @@ function rbTaskOpen_(task, config) {
 }
 
 
+
 // ===== Workbook.gs =====
 /** Explicit opt-in profile for the inspected XLSX structure. Contains no customer data. */
 const RB_OBSERVED_CATALOG_HEADERS = [
@@ -635,6 +640,7 @@ function rbCheckPreflight_(key, table) {
   if (missing.length)
     throw Error("مخطط القوائم غير متوافق: " + missing.join("، "));
 }
+
 
 
 // ===== Setup.gs =====
@@ -1157,6 +1163,29 @@ function rbQualityAudit_() {
 }
 
 
+/** Explicit additive upgrade only. Review on a private test copy first.
+ * No row backfills, ID changes, deduplication, or vocabulary changes.
+ */
+function RB_upgradeContactMetadata() {
+  rbAdmin_();
+  return rbLocked_(() => {
+    rbReady_(); rbRequireBackup_();
+    const additions = { customers: ["Normalized Phone"], tasks: ["ملاحظات المتابعة"] };
+    Object.keys(additions).forEach(key => {
+      const t = rbTable_(key);
+      additions[key].forEach(header => {
+        if (t.map[header] !== undefined) return;
+        const column = t.sheet.getLastColumn() + 1;
+        if (column > t.sheet.getMaxColumns()) t.sheet.insertColumnsAfter(t.sheet.getMaxColumns(), 1);
+        t.sheet.getRange(1, column).setValue(header);
+      });
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, backfilled: false };
+  });
+}
+
+
 // ===== Code.gs =====
 /** Operational Phase 01 extension. All writes target the explicitly bound spreadsheet. */
 function onOpen() {
@@ -1235,7 +1264,9 @@ function rbLog_(action, id, actor, requestId) {
 function rbWrite_(action, p, planner) {
   const authorized = rbAuthorize_();
   const actor = typeof RB_RENDER_CONTEXT_ !== "undefined" && RB_RENDER_CONTEXT_ ? RB_RENDER_CONTEXT_.actor : authorized;
-  return rbLocked_(() => {
+  const started = Date.now();
+  try {
+  const result = rbLocked_(() => {
     rbReady_();
     if (!p || typeof p !== "object") throw Error("طلب غير صحيح");
     const requestId = rbString_(p.requestId || Utilities.getUuid(), 100);
@@ -1274,14 +1305,13 @@ function rbWrite_(action, p, planner) {
       throw Error(
         "توجد عملية معلّقة. أعيدي نفس الطلب الأصلي أو اتبعي إجراء الاستعادة قبل عمليات جديدة.",
       );
-    const id = entry
+    let id = entry
       ? rbString_(entry.raw["Entity ID"])
       : p.id
         ? rbString_(p.id)
         : "RB-" + Utilities.getUuid();
     const prepared = planner(id, requestId);
-    if (prepared.alreadyComplete && !entry)
-      return { ok: true, id: prepared.existingId || id, alreadyComplete: true };
+    if (prepared.alreadyComplete && prepared.existingId) id = prepared.existingId;
     if (!entry) {
       rbAppend_("requests", {
         "Request ID": requestId,
@@ -1298,7 +1328,7 @@ function rbWrite_(action, p, planner) {
     }
     try {
       if (prepared.plan) rbApply_(prepared.plan);
-      rbLog_(action, id, actor, requestId);
+      if (!prepared.alreadyComplete) rbLog_(prepared.logText || action, id, actor, requestId);
       const table = rbTable_("requests");
       table.sheet.getRange(entry.row, table.map.State + 1).setValue("DONE");
       SpreadsheetApp.flush();
@@ -1308,14 +1338,16 @@ function rbWrite_(action, p, planner) {
           requestId,
       );
     }
-    let warning = "";
-    try {
-      rbDashboard_();
-    } catch (error) {
-      warning = "تم حفظ العملية؛ تحديث لوحة الإدارة يحتاج إعادة المحاولة.";
-    }
-    return { ok: true, id: id, requestId: requestId, warning: warning };
+    // Dashboard is a derived view. Never delay or fail a committed save to rebuild it.
+    return { ok: true, id: id, requestId: requestId };
+
   });
+  if (typeof console !== "undefined") console.log(JSON.stringify({event:"crm.sheet.saved",requestId:p && p.requestId,action:action,durationMs:Date.now()-started}));
+  return result;
+  } catch(error) {
+    if (typeof console !== "undefined") console.error(JSON.stringify({event:"crm.sheet.failure",requestId:p && p.requestId,action:action,code:String(error.message).startsWith("RB_PENDING:")?"pending":"rejected",durationMs:Date.now()-started}));
+    throw error;
+  }
 }
 function rbCustomerPatch_(p, old, config) {
   const patch = {};
@@ -1373,15 +1405,13 @@ function rbCustomerPatch_(p, old, config) {
     const duplicate = rbRecords_("customers").filter(
       (c) => c.id !== (old && old.id) && rbPhone_(c.phone) === normalized,
     );
-    if (duplicate.length && !p.confirmSeparateCustomer)
+    if (duplicate.length)
       throw Error(
-        "RB_DUPLICATE: نفس الهاتف موجود في السجل " +
-          (duplicate[0].id || "صف بلا معرّف") +
-          ". افتحي السجل أولًا. إذا كانت عميلة مختلفة فعلًا، أكدي إنشاء سجل مستقل.",
+        "RB_DUPLICATE: " + JSON.stringify({ id: duplicate[0].id || "", name: duplicate[0].name, phone: duplicate[0].phone }),
       );
-    if (duplicate.length && p.confirmSeparateCustomer !== true)
-      throw Error("تأكيد السجل المستقل غير صحيح");
   }
+  if (phoneChanged && phone) patch[fields.phone] = rbSafe_(normalized);
+  if (phoneChanged && rbTable_("customers").map["Normalized Phone"] !== undefined) patch["Normalized Phone"] = normalized;
   return patch;
 }
 function RB_addCustomer(p) {
@@ -1409,7 +1439,10 @@ function RB_updateCustomer(p) {
     if (c._request === requestId) return {};
     const patch = rbCustomerPatch_(p, c, rbConfig_());
     patch["آخر تعديل"] = new Date();
-    return { plan: rbPlan_("customers", c._row, patch, requestId) };
+    return { plan: rbPlan_("customers", c._row, patch, requestId), logText:
+      (p.status !== undefined && p.status !== c.status ? "تغيير الحالة: " + c.status + " ← " + p.status + (p.status === "تم التعاقد" ? " · تحويل إلى عميلة" : "") : "تعديل عميلة") +
+      (p.notes !== undefined && p.notes !== c.notes ? " · تحديث الملاحظات" : "") +
+      (p.lastMessage !== undefined && p.lastMessage !== c.lastMessage ? " · تحديث الرسالة" : "") };
   });
 }
 function RB_addAppointment(p) {
@@ -1488,15 +1521,19 @@ function RB_addFollowup(p) {
     const c = rbFind_("customers", rbString_(p.customerId));
     const config = rbConfig_(),
       title = rbString_(p.title, 1000),
-      due = rbString_(p.due),
+      due = rbString_(p.due, 40),
       staff = rbChoice_(config, "staff", rbString_(p.staff || c.staff));
-    if (!title || !rbDateValid_(due) || !staff)
+    if (!title || !rbDateValid_(due.slice(0, 10)) || (due.length > 10 && !/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(due)) || !staff)
       throw Error("المهمة والتاريخ والموظفة مطلوبون");
+    const notes = rbString_(p.notes, 4000);
+    if (notes && rbTable_("tasks").map["ملاحظات المتابعة"] === undefined) throw Error("يلزم ترقية عمود ملاحظات المتابعة بعد نسخة احتياطية؛ لم تُحفظ المتابعة");
+    const metadata = rbTable_("tasks").map["ملاحظات المتابعة"] !== undefined ? { "ملاحظات المتابعة": rbSafe_(notes) } : {};
     return {
       plan: rbPlan_(
         "tasks",
         null,
         {
+          ...metadata,
           "Task ID": rbSafe_(id),
           "Customer ID": rbSafe_(c.id),
           "اسم العميلة": rbSafe_(c.name),
@@ -1543,7 +1580,7 @@ function RB_getData() {
       today = rbToday_();
     const invalidDates =
       appointments.filter((a) => !rbDateValid_(a.date)).length +
-      tasks.filter((t) => !rbDateValid_(t.due)).length;
+      tasks.filter((t) => !rbDateValid_(t.due.slice(0, 10))).length;
     const linked = new Set(customers.map((c) => c.id).filter(Boolean));
     const publicRows = (rows) =>
       rows.map((row) => {
@@ -1781,6 +1818,31 @@ function RB_recoverPending(requestId) {
 }
 
 
+// Read-only reconciliation under the same writer lock; never reveals another actor's journal.
+function RB_requestStatus(p) {
+  const authorized = rbAuthorize_();
+  const actor = typeof RB_RENDER_CONTEXT_ !== "undefined" && RB_RENDER_CONTEXT_ ? RB_RENDER_CONTEXT_.actor : authorized;
+  return rbLocked_(() => {
+    rbReady_();
+    const entry = rbRows_("requests").find(r => r.raw["Request ID"] === p.requestId && r.raw.Actor === actor);
+    if (!entry) return { state: "not_found" };
+    const id = rbString_(entry.raw["Entity ID"]);
+    const entity = entry.raw.Action === "إضافة عميلة" || entry.raw.Action === "تعديل عميلة" ? "customers" : entry.raw.Action === "حجز موعد" || entry.raw.Action === "تعديل موعد" ? "appointments" : "tasks";
+    const record = rbRecords_(entity).find(r => r.id === id);
+    if (record && (entry.raw.State === "DONE" || record._request === p.requestId)) {
+      if (entry.raw.State !== "DONE") {
+        rbLog_(entry.raw.Action, id, actor, p.requestId);
+        const t = rbTable_("requests");
+        t.sheet.getRange(entry.row, t.map.State + 1).setValue("DONE");
+        SpreadsheetApp.flush();
+      }
+      return { state: "saved", id: id, ok: true };
+    }
+    return { state: "pending" };
+  });
+}
+
+
 // ===== Bridge.gs =====
 /** Optional server-to-server bridge. Disabled until an administrator enables it.
  * No credentials in URLs, source, responses or logs. Requests are HMAC signed.
@@ -1814,7 +1876,7 @@ function rbRenderEqual_(a, b) {
   return difference === 0;
 }
 function doPost(event) {
-  let result;
+  let result, request;
   try {
     const props = rbProps_();
     const secret = props.getProperty("RB_RENDER_SECRET");
@@ -1823,7 +1885,7 @@ function doPost(event) {
     if (!raw || raw.length > 100000) throw Error("RB_BRIDGE_AUTH");
     const envelope = JSON.parse(raw);
     if (typeof envelope.body !== "string" || !rbRenderEqual_(envelope.signature, rbRenderSignature_(envelope.body, secret))) throw Error("RB_BRIDGE_AUTH");
-    const request = JSON.parse(envelope.body);
+    request = JSON.parse(envelope.body);
     if (request.version !== 1 || !Number.isFinite(request.at) || Math.abs(Date.now() - request.at) > 120000 || !/^[a-zA-Z0-9_-]{16,100}$/.test(request.nonce || "")) throw Error("RB_BRIDGE_AUTH");
     const actor = request.actor;
     if (!actor || !["admin", "staff"].includes(actor.role) || typeof actor.id !== "string" || !/^[a-zA-Z0-9_.@-]{1,100}$/.test(actor.id) || !rbString_(actor.name, 120)) throw Error("RB_BRIDGE_AUTH");
@@ -1837,6 +1899,7 @@ function doPost(event) {
     });
     const methods = {
       read: RB_getData,
+      "request.status": RB_requestStatus,
       "customer.add": RB_addCustomer,
       "customer.update": RB_updateCustomer,
       "appointment.add": RB_addAppointment,
@@ -1850,10 +1913,25 @@ function doPost(event) {
     RB_RENDER_CONTEXT_ = { owner: owner, actor: "Render/" + actor.id + " (" + actor.role + ")" };
     result = { ok: true, data: methods[request.method](request.payload) };
   } catch (error) {
-    const message = String(error && error.message || "RB_BRIDGE_FAILED");
-    result = { ok: false, error: message };
+    let message = String(error && error.message || "RB_BRIDGE_FAILED");
+    let reconciled = null;
+    if (RB_RENDER_CONTEXT_ && request && request.method !== "read" && request.method !== "request.status" && message !== "Request ID مستخدم لعملية مختلفة") {
+      try {
+        const state = RB_requestStatus(request.payload);
+        if (state.state === "saved") reconciled = state;
+        else if (state.state === "pending") message = "RB_PENDING: يلزم حسم الطلب بنفس Request ID";
+      } catch (_) { message = "RB_PENDING: تعذّر التحقق من الطلب"; }
+    }
+    let existing = null;
+    if (message.startsWith("RB_DUPLICATE: ")) {
+      try { existing = JSON.parse(message.slice("RB_DUPLICATE: ".length)); } catch (_) {}
+    }
+    // Metadata only: never log payloads, names, phone numbers, signatures, or credentials.
+    if (typeof console !== "undefined") console.error(JSON.stringify({ event: "crm.bridge.failure", code: existing ? "duplicate" : message.startsWith("RB_PENDING:") ? "pending" : "rejected" }));
+    result = reconciled ? { ok: true, data: {ok:true,id:reconciled.id,reconciled:true} } : { ok: false, error: existing ? "RB_DUPLICATE: رقم الهاتف مسجل بالفعل" : message, existing: existing };
   } finally {
     RB_RENDER_CONTEXT_ = null;
   }
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
+

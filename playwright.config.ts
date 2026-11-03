@@ -17,7 +17,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev -- --port 3100",
+    command: "npm run dev -- --webpack --port 3100",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
     env: {
@@ -28,3 +28,4 @@ export default defineConfig({
     },
   },
 });
+

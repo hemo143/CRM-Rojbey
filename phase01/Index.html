@@ -382,12 +382,7 @@
       <form id="form">
         <fieldset id="fields">
           <div class="formgrid" id="formgrid"></div>
-          <label id="duplicate-confirm" class="checkbox full hidden spacer"
-            ><input type="checkbox" name="confirmSeparateCustomer" /><span
-              >راجعت السجل الموجود وتأكدت أنها عميلة مختلفة فعلًا تشترك في نفس
-              الهاتف. أنشئي سجلًا مستقلًا دون دمج.</span
-            ></label
-          >
+          <div id="duplicate-confirm" class="full hidden spacer"></div>
         </fieldset>
         <div class="actions">
           <button type="submit" class="primary" id="save">
@@ -1086,6 +1081,7 @@
         state.form = null;
       }
       async function submitPayload(fn, payload) {
+        if (state.busy) return;
         state.busy = true;
         $("save").disabled = true;
         $("close-dialog").disabled = true;
@@ -1093,15 +1089,31 @@
         show("form-error", "");
         state.pending = { fn: fn, payload: payload };
         try {
-          const result = await request(fn, payload);
+          let result;
+          try { result = await request(fn, payload); }
+          catch (original) {
+            let status;
+            try { status = await request("RB_requestStatus", {requestId:payload.requestId}); } catch (_) {}
+            if (status && status.state === "saved") result = {ok:true,id:status.id};
+            else throw original;
+          }
           state.pending = null;
-          show("message", result.warning || "تم الحفظ في Google Sheet.");
-          await reload();
+          show("message", result.warning || (fn === "RB_completeTask" ? "تم إكمال المتابعة مع الاحتفاظ بسجلها." : "تم الحفظ في Google Sheet."));
           $("dialog").close();
+          // Refresh is a separate operation; never turn a committed write into an error.
+          await reload();
         } catch (e) {
-          show("form-error", e.message);
-          if (e.message.includes("RB_DUPLICATE"))
-            $("duplicate-confirm").classList.remove("hidden");
+          show($("dialog").open ? "form-error" : "error", e.message);
+          if (e.message.includes("RB_DUPLICATE: ")) {
+            try {
+              const existing = JSON.parse(e.message.split("RB_DUPLICATE: ")[1]);
+              const box = $("duplicate-confirm"); box.replaceChildren();
+              box.append(el("p", existing.name + " · " + existing.phone + " · " + existing.id));
+              const button=el("button", "فتح ملف العميلة الموجودة"); button.type="button";
+              button.onclick=async()=>{await reload();$("dialog").close();openProfile(existing.id);};
+              box.append(button);box.classList.remove("hidden");
+            } catch (_) {}
+          }
           if (e.message.includes("RB_PENDING")) {
             $("fields").disabled = true;
             $("retry").classList.remove("hidden");
@@ -1119,8 +1131,6 @@
         if (state.busy) return;
         const f = state.form,
           payload = Object.fromEntries(new FormData(e.currentTarget));
-        payload.confirmSeparateCustomer =
-          payload.confirmSeparateCustomer === "on";
         payload.requestId = f.requestId;
         if (f.record) payload.id = f.record.id;
         const fn =
@@ -1140,20 +1150,9 @@
           submitPayload(state.pending.fn, state.pending.payload);
       };
       async function completeTask(t) {
-        if (state.busy) return;
-        state.busy = true;
-        try {
-          await request("RB_completeTask", {
-            id: t.id,
-            requestId: crypto.randomUUID(),
-          });
-          show("message", "تم إكمال المتابعة مع الاحتفاظ بسجلها.");
-          await reload();
-        } catch (e) {
-          show("error", e.message);
-        } finally {
-          state.busy = false;
-        }
+        const previous = state.pending;
+        const payload = previous && previous.fn === "RB_completeTask" && previous.payload.id === t.id ? previous.payload : {id:t.id,requestId:crypto.randomUUID()};
+        return submitPayload("RB_completeTask", payload);
       }
       $("close-dialog").onclick = closeDialog;
       $("cancel").onclick = closeDialog;
@@ -1177,3 +1176,4 @@
     </script>
   </body>
 </html>
+

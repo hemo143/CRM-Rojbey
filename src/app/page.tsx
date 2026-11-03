@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   channels as demoChannels,
   statuses as demoStatuses,
   cairoDate,
+  lifecycleStatus,
   type Data,
   type Customer,
   type Appointment,
@@ -16,6 +17,7 @@ import {
   recentCustomers,
 } from "@/lib/workflow";
 import Brand from "./brand";
+import { saveRecord, SaveError, type SavePayload } from "@/lib/save-client";
 type View =
   | "dashboard"
   | "customers"
@@ -56,6 +58,34 @@ export default function Home() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [pending, setPending] = useState<Record<string, unknown> | null>(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const readVersion = useRef(0);
+  const mutationLock = useRef(false);
+  const pendingRef = useRef<SavePayload | null>(null);
+  const [duplicate, setDuplicate] = useState<{
+    id: string;
+    name: string;
+    phone: string;
+  } | null>(null);
+  const pendingStorageKey = user
+    ? `rojbey.pending:${user.id || user.role + ":" + user.name}`
+    : "";
+  useEffect(() => {
+    if (!pendingStorageKey || pendingRef.current) return;
+    try {
+      const raw = sessionStorage.getItem(pendingStorageKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (/^[A-Za-z0-9][A-Za-z0-9_-]{7,99}$/.test(saved.requestId || "")) {
+          pendingRef.current = saved;
+          setPending(saved);
+        }
+      }
+    } catch {
+      /* Storage may be unavailable. In-memory protection still applies. */
+    }
+  }, [pendingStorageKey]);
   const live = !!data?.sheet;
   const lists = data?.sheet?.lists;
   const staffNames = live ? lists?.staff || [] : demoStaffNames;
@@ -73,10 +103,12 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [pending]);
   async function load() {
-    const res = await fetch("/api/crm");
+    const version = ++readVersion.current;
+    const res = await fetch("/api/crm", { cache: "no-store" });
     const body = await res.json();
     if (!res.ok) throw Error(body.error);
-    setData(body);
+    if (version === readVersion.current) setData(body);
+    return body as Data;
   }
   useEffect(() => {
     (async () => {
@@ -95,12 +127,38 @@ export default function Home() {
     })();
   }, []);
   useEffect(() => {
+    if (!user || loading) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const version = ++readVersion.current;
+      try {
+        const response = await fetch("/api/crm", { cache: "no-store" });
+        const body = await response.json();
+        if (!cancelled && version === readVersion.current && response.ok)
+          setData(body);
+        else if (!cancelled && version === readVersion.current && !response.ok)
+          setError(
+            "تعذّر تحديث البحث من مصدر البيانات؛ النتائج المعروضة قديمة.",
+          );
+      } catch {
+        if (!cancelled)
+          setError(
+            "تعذّر تحديث البحث من مصدر البيانات؛ النتائج المعروضة قديمة.",
+          );
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [search, view, user, loading]);
+  useEffect(() => {
     if (!modal) return;
     const previous = document.activeElement as HTMLElement | null;
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     function keydown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !busy) {
+      if (e.key === "Escape" && !busyRef.current) {
         setModal(null);
         return;
       }
@@ -127,7 +185,7 @@ export default function Home() {
       document.removeEventListener("keydown", keydown);
       previous?.focus();
     };
-  }, [modal, busy]);
+  }, [modal]);
   async function logout() {
     if (pending) {
       setError("احسمي الطلب السابق بإعادة المحاولة قبل تسجيل الخروج.");
@@ -173,6 +231,7 @@ export default function Home() {
   }
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (mutationLock.current) return;
     setBusy(true);
     setError("");
     const f = Object.fromEntries(new FormData(e.currentTarget));
@@ -195,32 +254,66 @@ export default function Home() {
     }
   }
   async function mutate(p: Record<string, unknown>) {
-    if (pending && p !== pending)
-      throw Error(
-        "توجد عملية لم يتأكد حفظها. استخدمي إعادة محاولة الطلب السابق قبل عملية جديدة.",
-      );
-    const payload = p.requestId ? p : { ...p, requestId: crypto.randomUUID() };
-    if (live) setPending(payload);
-    const r = await fetch("/api/crm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const b = await r.json();
-    if (!r.ok) {
-      if (!b.pending) setPending(null);
-      throw Error(b.error);
+    if (mutationLock.current) return;
+    if (pendingRef.current && p !== pendingRef.current)
+      throw Error("احسمي الطلب السابق قبل عملية جديدة.");
+    mutationLock.current = true;
+    setBusy(true);
+    const payload = (
+      p.requestId ? p : { ...p, requestId: crypto.randomUUID() }
+    ) as SavePayload;
+    pendingRef.current = payload;
+    try {
+      if (pendingStorageKey)
+        sessionStorage.setItem(pendingStorageKey, JSON.stringify(payload));
+    } catch {}
+    setPending(payload);
+    setDuplicate(null);
+    try {
+      const result = await saveRecord(payload);
+      // Commit succeeded. A subsequent read failure must never masquerade as save failure.
+      pendingRef.current = null;
+      try {
+        if (pendingStorageKey) sessionStorage.removeItem(pendingStorageKey);
+      } catch {}
+      setPending(null);
+      setNotice("تم الحفظ بنجاح.");
+      setError("");
+      setSearch("");
+      setStatus("");
+      setChannel("");
+      setSource("");
+      setStaffFilter("");
+      if (p.action === "customer.update" && profile) setProfile(result.id);
+      try {
+        await load();
+      } catch {
+        setNotice(
+          "تم الحفظ بنجاح. تعذّر تحديث العرض؛ استخدمي تحديث البيانات دون إعادة الحفظ.",
+        );
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof SaveError && !error.pending) {
+        pendingRef.current = null;
+        try {
+          if (pendingStorageKey) sessionStorage.removeItem(pendingStorageKey);
+        } catch {}
+        setPending(null);
+        if (error.existing) setDuplicate(error.existing);
+      }
+      throw error;
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
     }
-    await load();
-    setPending(null);
-    setNotice("تم حفظ التغييرات.");
   }
   async function retryPending() {
-    if (!pending) return;
+    if (!pendingRef.current || mutationLock.current) return;
     setBusy(true);
     setError("");
     try {
-      await mutate(pending);
+      await mutate(pendingRef.current!);
       setModal(null);
       setEditing(null);
     } catch (e) {
@@ -234,6 +327,7 @@ export default function Home() {
     item: Customer | Appointment | null = null,
   ) {
     setError("");
+    setDuplicate(null);
     setEditing(item);
     setModal(kind);
   }
@@ -251,12 +345,26 @@ export default function Home() {
         .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)) || [],
     due =
       data?.followups.filter(
-        (t) => !t.done && !t.cancelled && t.due <= today,
+        (t) => !t.done && !t.cancelled && t.due.slice(0, 10) <= today,
       ) || [],
     filtered =
       data?.customers.filter(
         (c) =>
-          (view !== "leads" || c.status === newStatus) &&
+          (search ||
+            view !== "leads" ||
+            lifecycleStatus(c) === "New Inquiry") &&
+          (search ||
+            status ||
+            view !== "customers" ||
+            lifecycleStatus(c) === "Customer" ||
+            ![
+              "New Inquiry",
+              "Contacted",
+              "Qualified",
+              "Appointment Booked",
+              "Visited",
+              "Lost / Not Interested",
+            ].includes(lifecycleStatus(c))) &&
           customerMatchesSearch(c, search) &&
           (!status || c.status === status) &&
           (!channel || c.channel === channel) &&
@@ -326,7 +434,7 @@ export default function Home() {
                 />
               </label>
             )}
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={busy || !!pending}>
               {busy
                 ? "جارٍ الدخول…"
                 : demo
@@ -481,6 +589,33 @@ export default function Home() {
                   </button>
                 )}
               </div>
+              {user.role === "admin" &&
+                lifecycleStatus(selected) !== "Customer" && (
+                  <button
+                    className="primary"
+                    disabled={busy || !!pending}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await mutate({
+                          action: "customer.update",
+                          id: selected.id,
+                          status: "تم التعاقد",
+                        });
+                      } catch (e) {
+                        setError((e as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    تحويل إلى عميلة
+                  </button>
+                )}
+              <p className="muted">
+                الاستفسار والعميلة ملف واحد بنفس المعرّف. التحويل يغيّر الحالة
+                فقط.
+              </p>
               <div className="profile-grid">
                 <section className="panel">
                   <h2>تفاصيل العميلة</h2>
@@ -494,7 +629,6 @@ export default function Home() {
                             ["تاريخ الفرح (أصلي)", selected.wedding],
                             ["مكان السكن", selected.city],
                             ["كود الفستان", selected.dress],
-                            ["Customer ID", selected.id],
                             [
                               "تاريخ الإضافة",
                               selected.createdAt
@@ -512,6 +646,7 @@ export default function Home() {
                       ["اسم المستخدم", selected.username],
                       ["Meta Contact ID", selected.metaContactId],
                       ["حالة الاستفسار", selected.status],
+                      ["Customer ID", selected.id],
                       ["الموظفة", selected.staff],
                       ["الخدمة", selected.service],
                       ["قصة الفستان", selected.model],
@@ -559,6 +694,7 @@ export default function Home() {
                       <div className="list-row" key={t.id}>
                         <div>
                           {t.title}
+                          {t.notes && <p>{t.notes}</p>}
                           <small>{dateLabel(t.due)}</small>
                         </div>
                         <span>
@@ -577,8 +713,9 @@ export default function Home() {
                   >
                     إضافة متابعة
                   </button>
-                  <h3>سجل النشاط</h3>
-                  {data?.activity
+                  <h3>سجل رحلة العميلة</h3>
+                  {[...(data?.activity || [])]
+                    .sort((a, b) => b.at.localeCompare(a.at))
                     .filter((a) => a.customerId === selected.id)
                     .map((a) => (
                       <div key={a.id} className="activity">
@@ -608,7 +745,7 @@ export default function Home() {
                     {view === "dashboard"
                       ? "كل عميلة لها حكاية. وكل موعد يستحق العناية."
                       : view === "customers"
-                        ? "تفاصيل صغيرة، وعلاقة تستمر."
+                        ? "العميلات المحوّلات. اختاري مرحلة من الفلتر لعرض باقي جهات الاتصال، أو ابحثي في جميع الملفات."
                         : view === "appointments"
                           ? "مساحة لكل عروس. ووقت لكل تفصيلة."
                           : view === "followups"
@@ -993,7 +1130,7 @@ export default function Home() {
                             ? "ملغاة"
                             : t.done
                               ? "مكتملة"
-                              : t.due <= today
+                              : t.due.slice(0, 10) <= today
                                 ? "مستحقة"
                                 : "قادمة"}
                         </span>
@@ -1093,7 +1230,7 @@ export default function Home() {
                   {modal === "customer"
                     ? editing
                       ? "تعديل ملف العميلة"
-                      : "حكاية جديدة في الأتيليه"
+                      : "إضافة جهة اتصال / استفسار"
                     : modal === "appointment"
                       ? editing
                         ? "تعديل الموعد"
@@ -1119,6 +1256,29 @@ export default function Home() {
               <button disabled={busy} onClick={retryPending}>
                 إعادة محاولة الطلب السابق دون تغيير التفاصيل
               </button>
+            )}
+            {duplicate && (
+              <div role="status">
+                <p>
+                  {duplicate.name} · {duplicate.phone} · {duplicate.id}
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await load();
+                      setProfile(duplicate.id);
+                      setModal(null);
+                    } catch {
+                      setError(
+                        "تعذّر فتح الملف؛ حدّثي البيانات دون إعادة الإضافة.",
+                      );
+                    }
+                  }}
+                >
+                  فتح ملف العميلة الموجودة
+                </button>
+              </div>
             )}
             <form onSubmit={save}>
               <div className="form-grid">
@@ -1378,10 +1538,14 @@ export default function Home() {
                           تاريخ المتابعة
                           <input
                             name="due"
-                            type="date"
+                            type="datetime-local"
                             required
-                            defaultValue={today}
+                            defaultValue={today + "T12:00"}
                           />
+                        </label>
+                        <label className="full">
+                          ملاحظات المتابعة
+                          <textarea name="notes" maxLength={4000} />
                         </label>
                         <Select
                           name="staff"
@@ -1396,7 +1560,7 @@ export default function Home() {
                 )}
               </div>
               <div className="form-actions">
-                <button className="primary" disabled={busy}>
+                <button className="primary" disabled={busy || !!pending}>
                   {busy ? "جارٍ الحفظ…" : "حفظ التفاصيل"}
                 </button>
                 <button
