@@ -43,6 +43,8 @@ exports.createSheetWorkflow = () => {
   c.RB_configureObservedWorkbook();
   c.RB_createBackup();
   c.RB_setup();
+  c.RB_createBackup();
+  c.RB_upgradeContactMetadata();
   db.owner = db.actor;
   db.actor = "";
   db.properties.set("RB_RENDER_ENABLED", "true");
@@ -68,6 +70,8 @@ exports.createSheetWorkflow = () => {
   };
   return {
     call,
+    context: c,
+    db,
     approveSyntheticStaff() {
       const t = c.rbTable_("lists");
       t.sheet.getRange(2, t.map["الموظفات"] + 1).setValue("فريق اختبار");

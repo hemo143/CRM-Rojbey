@@ -139,13 +139,10 @@ test("required customer name, phone normalization, duplicate decision and no sil
     () => add(c, { requestId: "customer-request-002", phone: "010-1234-5678" }),
     /RB_DUPLICATE/,
   );
-  const second = add(c, {
-    requestId: "customer-request-003",
-    phone: "010-1234-5678",
-    confirmSeparateCustomer: true,
-  });
-  assert.notEqual(first.id, second.id);
-  assert.equal(c.RB_getData().customers.length, 2);
+  assert.throws(() => add(c, {
+    requestId: "customer-request-003", phone: "00201012345678", confirmSeparateCustomer: true,
+  }), /RB_DUPLICATE/);
+  assert.equal(c.RB_getData().customers.length, 1);
 });
 test("customer edit preserves identity, created timestamp, unknown formula and original phone display", () => {
   const { db, c } = setup((db, c) => {
@@ -315,6 +312,7 @@ test("dashboard upserts correct known metrics and zeroes disappeared groups", ()
   const { db, c } = setup(),
     id = add(c).id;
   task(c, id);
+  c.RB_refreshDashboard();
   const rows = db.active
     .getSheetByName("لوحة الإدارة")
     .getDataRange()
@@ -334,6 +332,7 @@ test("dashboard upserts correct known metrics and zeroes disappeared groups", ()
     status: "قيد الدراسة",
     requestId: "status-change-request",
   });
+  c.RB_refreshDashboard();
   const after = db.active
     .getSheetByName("لوحة الإدارة")
     .getDataRange()
@@ -515,3 +514,4 @@ test("an existing named range used for another location is not overwritten", () 
     10,
   );
 });
+

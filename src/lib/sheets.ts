@@ -1,5 +1,10 @@
 import { createHmac, randomUUID } from "node:crypto";
-import type { Data, Session } from "./domain.ts";
+import {
+  normalizePhone,
+  lifecycleStatus,
+  type Data,
+  type Session,
+} from "./domain.ts";
 
 export const sheetsEnabled = () => process.env.CRM_DATA_PROVIDER === "sheets";
 export function assertLiveMode(user?: Session | null) {
@@ -32,6 +37,7 @@ export function signedEnvelope(
 }
 export class SheetCallError extends Error {
   pending: boolean;
+  existing?: { id: string; name: string; phone: string };
   constructor(message: string, pending: boolean) {
     super(message);
     this.pending = pending;
@@ -86,14 +92,17 @@ export async function sheetCall(
       method !== "read",
     );
   }
-  if (result.ok !== true)
-    throw new SheetCallError(
+  if (result.ok !== true) {
+    const error = new SheetCallError(
       typeof result.error === "string"
         ? result.error
         : "تعذّر تنفيذ العملية في الشيت",
       typeof result.error === "string" &&
         result.error.startsWith("RB_PENDING:"),
     );
+    error.existing = result.existing;
+    throw error;
+  }
   return result.data;
 }
 type Row = Record<string, string>;
@@ -129,6 +138,8 @@ export function mapSheetData(raw: NativeData): Data {
       id: r.id,
       name: r.name,
       phone: r.phone,
+      normalizedPhone: normalizePhone(r.phone),
+      lifecycle_status: lifecycleStatus({ status: r.status }),
       channel: r.channel,
       source: r.source,
       username: r.username,
@@ -162,6 +173,9 @@ export function mapSheetData(raw: NativeData): Data {
       staff: r.staff,
       done: r.status === values.taskComplete,
       cancelled: !!values.taskCancelled && r.status === values.taskCancelled,
+      status: r.status,
+      notes: r.notes || "",
+      createdAt: r.createdAt,
     })),
     activity: raw.activity.map((r, i) => ({
       id: `sheet-log-${i}`,
@@ -212,10 +226,35 @@ export function sheetOperation(p: Record<string, unknown>) {
     : action === "appointment.save"
       ? ["customerId", "date", "time", "staff", "type", "status", "notes"]
       : action === "followup.add"
-        ? ["customerId", "title", "due", "staff"]
+        ? ["customerId", "title", "due", "staff", "notes"]
         : [];
   const payload: Record<string, unknown> = { requestId: p.requestId };
   if (p.id) payload.id = p.id;
   for (const key of allowed) if (Object.hasOwn(p, key)) payload[key] = p[key];
   return { method: methods[action], payload };
+}
+
+// Reconcile an uncertain transport response before allowing the UI to suggest retry.
+export async function sheetMutation(
+  method: string,
+  payload: Record<string, unknown>,
+  user: Session,
+) {
+  try {
+    return await sheetCall(method, payload, user);
+  } catch (error) {
+    if (!(error instanceof SheetCallError) || !error.pending) throw error;
+    try {
+      const status = await sheetCall(
+        "request.status",
+        { requestId: payload.requestId },
+        user,
+      );
+      if (status.state === "saved")
+        return { ok: true, id: status.id, reconciled: true };
+    } catch {
+      /* Retain uncertainty; never claim nothing was saved. */
+    }
+    throw error;
+  }
 }

@@ -515,3 +515,26 @@ function rbQualityAudit_() {
     return { incomplete: true, error: error.message };
   }
 }
+
+
+/** Explicit additive upgrade only. Review on a private test copy first.
+ * No row backfills, ID changes, deduplication, or vocabulary changes.
+ */
+function RB_upgradeContactMetadata() {
+  rbAdmin_();
+  return rbLocked_(() => {
+    rbReady_(); rbRequireBackup_();
+    const additions = { customers: ["Normalized Phone"], tasks: ["ملاحظات المتابعة"] };
+    Object.keys(additions).forEach(key => {
+      const t = rbTable_(key);
+      additions[key].forEach(header => {
+        if (t.map[header] !== undefined) return;
+        const column = t.sheet.getLastColumn() + 1;
+        if (column > t.sheet.getMaxColumns()) t.sheet.insertColumnsAfter(t.sheet.getMaxColumns(), 1);
+        t.sheet.getRange(1, column).setValue(header);
+      });
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, backfilled: false };
+  });
+}

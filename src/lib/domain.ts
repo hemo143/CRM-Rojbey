@@ -1,6 +1,11 @@
 export const statuses = [
   "جديدة",
   "قيد التواصل",
+  "تم التواصل",
+  "مهتمة",
+  "حجزت موعد",
+  "تمت الزيارة",
+  "غير مهتمة",
   "موعد مؤكد",
   "تم التعاقد",
   "مغلقة",
@@ -17,6 +22,8 @@ export type Customer = {
   id: string;
   name: string;
   phone: string;
+  normalizedPhone?: string;
+  lifecycle_status?: string;
   channel: string;
   source?: string;
   wedding?: string;
@@ -53,6 +60,9 @@ export type Followup = {
   staff: string;
   done: boolean;
   cancelled?: boolean;
+  status?: string;
+  notes?: string;
+  createdAt?: string;
 };
 export type Activity = {
   id: string;
@@ -66,6 +76,10 @@ export type Data = {
   appointments: Appointment[];
   followups: Followup[];
   activity: Activity[];
+  requests?: Record<
+    string,
+    { actor: string; hash: string; result: { ok: boolean; id: string } }
+  >;
   sheet?: {
     lists: Record<string, string[]>;
     values: Record<string, string>;
@@ -99,9 +113,54 @@ export function validDate(s: string): boolean {
   );
 }
 export function normalizePhone(s: string): string {
-  return s
+  let phone = s
     .replace(/[٠-٩]/g, (c) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
-    .replace(/[\s()-]/g, "");
+    .replace(/[۰-۹]/g, (c) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)))
+    .replace(/[\s().-]/g, "")
+    .replace(/^00/, "+");
+  if (/^01[0125]\d{8}$/.test(phone)) phone = "+20" + phone.slice(1);
+  if (/^201[0125]\d{8}$/.test(phone)) phone = "+" + phone;
+  return phone;
+}
+export class DuplicateContactError extends Error {
+  existing: Pick<Customer, "id" | "name" | "phone">;
+  constructor(c: Customer) {
+    super("رقم الهاتف مسجل بالفعل — افتحي ملف العميلة الموجود");
+    this.existing = { id: c.id, name: c.name, phone: c.phone };
+  }
+}
+export const lifecycleStatuses = [
+  "New Inquiry",
+  "Contacted",
+  "Qualified",
+  "Appointment Booked",
+  "Visited",
+  "Customer",
+  "Lost / Not Interested",
+] as const;
+export function lifecycleStatus(
+  c: Pick<Customer, "status" | "lifecycle_status">,
+): string {
+  if (
+    c.lifecycle_status &&
+    lifecycleStatuses.includes(
+      c.lifecycle_status as (typeof lifecycleStatuses)[number],
+    )
+  )
+    return c.lifecycle_status;
+  const aliases: Record<string, string> = {
+    جديدة: "New Inquiry",
+    "قيد التواصل": "Contacted",
+    "تم التواصل": "Contacted",
+    مهتمة: "Qualified",
+    "موعد مؤكد": "Appointment Booked",
+    "حجزت موعد": "Appointment Booked",
+    "تمت الزيارة": "Visited",
+    "تم التعاقد": "Customer",
+    "غير مهتمة": "Lost / Not Interested",
+    مغلقة: "Lost / Not Interested",
+  };
+  return aliases[c.status] || c.status; // Keep unknown historical vocabulary visible.
 }
 export function requireCustomer(data: Data, id: string) {
   const customer = data.customers.find((c) => c.id === id);
@@ -117,11 +176,12 @@ export function validateCustomer(
     phone = normalizePhone(text(p.phone, 30));
   if (!name) throw Error("اسم العميلة مطلوب");
   if (phone && !/^\+?\d{7,15}$/.test(phone)) throw Error("رقم الهاتف غير صحيح");
-  if (
+  const duplicate =
     phone &&
-    data.customers.some((c) => normalizePhone(c.phone) === phone && c.id !== id)
-  )
-    throw Error("رقم الهاتف مسجل بالفعل");
+    data.customers.find(
+      (c) => normalizePhone(c.phone) === phone && c.id !== id,
+    );
+  if (duplicate) throw new DuplicateContactError(duplicate);
   const status = text(p.status) || "جديدة";
   if (!statuses.includes(status as Status))
     throw Error("حالة العميلة غير صحيحة");
@@ -131,6 +191,8 @@ export function validateCustomer(
   return {
     name,
     phone,
+    normalizedPhone: phone,
+    lifecycle_status: lifecycleStatus({ status }),
     channel,
     username: text(p.username, 100),
     metaContactId: text(p.metaContactId, 100),

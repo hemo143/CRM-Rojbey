@@ -1,4 +1,4 @@
-import { validDate, type Customer } from "./domain.ts";
+import { normalizePhone, validDate, type Customer } from "./domain.ts";
 export function dateLabel(date: string) {
   if (!date) return "—";
   if (!validDate(date)) return date;
@@ -27,6 +27,12 @@ export function customerMatchesSearch(c: Customer, query: string) {
   const q = searchable(query.trim());
   if (!q) return true;
   if (
+    searchable(c.username || "")
+      .replace(/^@/, "")
+      .includes(q.replace(/^@/, ""))
+  )
+    return true;
+  if (
     [c.name, c.phone, c.username, c.id].some((v) =>
       searchable(v || "").includes(q),
     )
@@ -35,7 +41,10 @@ export function customerMatchesSearch(c: Customer, query: string) {
   return (
     /^[\d٠-٩۰-۹+\s().-]+$/.test(query) &&
     !!phoneDigits(query) &&
-    phoneDigits(c.phone).includes(phoneDigits(query))
+    (phoneDigits(normalizePhone(c.phone)).includes(
+      phoneDigits(normalizePhone(query)),
+    ) ||
+      phoneDigits(c.phone).includes(phoneDigits(query)))
   );
 }
 export function recentCustomers(customers: Customer[], count = 5) {

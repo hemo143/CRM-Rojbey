@@ -71,7 +71,7 @@ test("admin can create, search, edit, book, detect conflict, complete follow-up,
   await page.reload();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "العميلات", exact: false })
+    .getByRole("button", { name: "الاستفسارات الجديدة", exact: false })
     .click();
   await page
     .getByRole("button", { name: "عروس اختبار المتصفح", exact: true })

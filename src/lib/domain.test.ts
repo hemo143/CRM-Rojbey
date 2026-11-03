@@ -29,7 +29,7 @@ test("customer conflict is checked even with another staff member", () => {
 test("normalizes Arabic phone numbers and rejects duplicate numbers", () => {
   const d = seed();
   const c = validateCustomer(d, { name: "اختبار", phone: "٠١٠ ١٢٣٤ ٥٦٧٨" });
-  assert.equal(c.phone, "01012345678");
+  assert.equal(c.phone, "+201012345678");
   d.customers[0].phone = c.phone;
   assert.throws(
     () => validateCustomer(d, { name: "اختبار", phone: "010-1234-5678" }),
@@ -42,3 +42,4 @@ test("rejects invalid calendar dates and unknown status", () => {
     validateCustomer(seed(), { name: "اختبار", status: "invalid" }),
   );
 });
+
